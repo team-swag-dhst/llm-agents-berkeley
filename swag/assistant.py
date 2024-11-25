@@ -2,6 +2,7 @@ from anthropic import Anthropic
 from anthropic.types import Message
 import os
 from dotenv import load_dotenv
+from typing import Any
 
 load_dotenv()
 
@@ -18,7 +19,7 @@ def query_claude(messages: list, system: str, tools: list) -> Message:
 
     return response
 
-def convert_pydantic_to_anthropic_schema(model):
+def convert_pydantic_to_anthropic_schema(model) -> dict[str, Any]:
 
     json_schema = model.model_json_schema()
     return {
