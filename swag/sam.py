@@ -7,9 +7,10 @@ import torch
 import numpy as np
 from PIL import Image, ImageDraw
 from io import BytesIO
+import os
+import base64
 
-checkpoints_folder = Path(__file__).parent.parent / "sam2" / "checkpoints"
-checkpoint = str(checkpoints_folder / "sam2.1_hiera_tiny.pt")
+checkpoint = os.environ["HOME"] + "/sam2/checkpoints/sam2.1_hiera_tiny.pt"
 config = "configs/sam2.1/sam2.1_hiera_t.yaml"
 
 predictor = SAM2ImagePredictor(build_sam2(config, checkpoint))
@@ -17,13 +18,14 @@ predictor = SAM2ImagePredictor(build_sam2(config, checkpoint))
 class SamRequest(BaseModel): 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    image: bytes
+    image: str
     clicks: list[list[int]]
 
 
 
-def predict_mask(request: SamRequest) -> dict:
-    pil_img = Image.open(BytesIO(request.image))
+def predict_mask(request: SamRequest) -> Image.Image:
+    image_bytes = base64.b64decode(request.image)
+    pil_img = Image.open(BytesIO(image_bytes))
     img = np.array(pil_img.convert("RGB"))
 
     point_coords = np.array(request.clicks)
@@ -71,16 +73,17 @@ def predict_mask(request: SamRequest) -> dict:
             draw.ellipse([x-radius, y-radius, x+radius, y+radius], 
                         outline='white', width=2)
 
+    
+    # result.save('output.png')
 
-    result.save('output.png')
-
-    return {}
+    return result
 
 
 
 image_path = Path(__file__).parent.parent / "imgs" / "dali.png"
 with open(image_path, "rb") as f:
     image = f.read()
+    image = base64.b64encode(image).decode('utf-8')
 
 clicks = [[100, 100], [200, 200]]
 predict_mask(SamRequest(image=image, clicks=clicks))

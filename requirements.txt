@@ -1,2 +1,4 @@
 git+https://github.com/facebookresearch/sam2.git#egg=sam2
 fastapi[standard]==0.115.5
+anthropic==0.39.0
+requests==2.32.3
