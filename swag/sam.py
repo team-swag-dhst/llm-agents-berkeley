@@ -1,40 +1,86 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 from sam2.build_sam import build_sam2
 from pathlib import Path
+import cv2
 import torch
 import numpy as np
+from PIL import Image, ImageDraw
+from io import BytesIO
 
-class SamRequest(BaseModel):
+checkpoints_folder = Path(__file__).parent.parent / "sam2" / "checkpoints"
+checkpoint = str(checkpoints_folder / "sam2.1_hiera_tiny.pt")
+config = "configs/sam2.1/sam2.1_hiera_t.yaml"
+
+predictor = SAM2ImagePredictor(build_sam2(config, checkpoint))
+
+class SamRequest(BaseModel): 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     image: bytes
     clicks: list[list[int]]
 
-def predict_mask(request: SamRequest) -> dict:
-    checkpoints_folder = Path(__file__).parent.parent / "sam2" / "checkpoints"
-    checkpoint = str(checkpoints_folder / "sam2.1_hiera_tiny.pt")
-    config = "configs/sam2.1/sam2.1_hiera_t.yaml"
 
-    predictor = SAM2ImagePredictor(build_sam2(config, checkpoint))
+
+def predict_mask(request: SamRequest) -> dict:
+    pil_img = Image.open(BytesIO(request.image))
+    img = np.array(pil_img.convert("RGB"))
+
+    point_coords = np.array(request.clicks)
+    point_labels = np.array([1 for _ in range(len(request.clicks))])
 
     with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
-        predictor.set_image(request.image)
-        mask, score, logit = predictor.predict(
-                point_coords = np.array(request.clicks),
-                point_labels = np.array([1 for _ in range(len(request.clicks))]),
-                multimask_output=False
+        predictor.set_image(img)
+        masks, scores, logits = predictor.predict(
+                point_coords = point_coords,
+                point_labels = point_labels,
+                multimask_output=True
         )
 
-    print(mask)
-    print(score)
-    print(logit)
 
-    return {
-        "mask": mask
-    }
+    sorted_ind = np.argsort(scores)[-1]
+    mask = masks[sorted_ind]
+    score = scores[sorted_ind]
+    logit = logits[sorted_ind]
 
 
+    color = np.array([30/255, 144/255, 255/255, 0.5])
+    h, w = mask.shape[-2:]
+    mask = mask.astype(np.uint8)
+    mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = [cv2.approxPolyDP(contour, epsilon=0.01, closed=True) for contour in contours]
+    mask_image = cv2.drawContours(mask_image, contours, -1, (1, 1, 1, 1.0), thickness=10)
 
-with open(Path(__file__).parent.parent / "imgs" / "dali.png", "rb") as f:
+    if pil_img.mode != 'RGBA':
+        pil_img = pil_img.convert('RGBA')
+
+    mask_pil = Image.fromarray((mask_image * 255).astype(np.uint8), 'RGBA')
+
+    result = Image.alpha_composite(pil_img, mask_pil)
+
+    if point_coords is not None and point_labels is not None:
+        draw = ImageDraw.Draw(result)
+        
+        radius = 10 
+        for coord, label in zip(point_coords, point_labels):
+            x, y = coord
+            color = 'green' if label == 1 else 'red'
+            draw.ellipse([x-radius, y-radius, x+radius, y+radius], 
+                        fill=color)
+            draw.ellipse([x-radius, y-radius, x+radius, y+radius], 
+                        outline='white', width=2)
+
+
+    result.save('output.png')
+
+    return {}
+
+
+
+image_path = Path(__file__).parent.parent / "imgs" / "dali.png"
+with open(image_path, "rb") as f:
     image = f.read()
-    clicks = [[100, 100], [200, 200]]
-    predict_mask(SamRequest(image=image, clicks=clicks))
+
+clicks = [[100, 100], [200, 200]]
+predict_mask(SamRequest(image=image, clicks=clicks))
