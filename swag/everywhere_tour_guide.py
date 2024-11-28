@@ -15,7 +15,7 @@ class EverywhereTourGuideRequest(BaseModel):
     lon: float = Field(description="Longitude of the user")
 
 def research_main(request: EverywhereTourGuideRequest) -> Generator[str, Any, None]:
-    
+
     cache : dict[str, str] = {}
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
     tools: list = [convert_pydantic_to_anthropic_schema(tool) for tool in [SearchInternet, ReadWebsite, SearchForNearbyPlacesOfType]]
@@ -54,7 +54,7 @@ def research_main(request: EverywhereTourGuideRequest) -> Generator[str, Any, No
     )
     tool_use = response.stop_reason == "tool_use"
     messages.append({"role": "assistant", "content": response.content})
-    
+
     while tool_use:
         tool_use = response.stop_reason == "tool_use"
         for c in response.content:
@@ -97,5 +97,5 @@ def research_main(request: EverywhereTourGuideRequest) -> Generator[str, Any, No
                     tools=tools
             )
             messages.append({"role": "assistant", "content": response.content})
-    
+
     yield ""

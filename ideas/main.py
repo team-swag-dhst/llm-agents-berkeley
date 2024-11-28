@@ -1,125 +1,126 @@
+# main.py
+import sys
+import os
+from typing import List
+
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+
+from fastapi import FastAPI, Depends
+from fastapi.responses import StreamingResponse
+from anthropic import AsyncAnthropic
+from pydantic import BaseModel
 import geocoder
-import streamlit as st
-from anthropic.types import TextBlock, ToolUseBlock, MessageParam
-import logging
-from swag.assistant import convert_pydantic_to_anthropic_schema, query_claude
-from swag.tools import SearchInternet, ReadWebsite, PlacesTextSearch, PlacesDetailsSearch, search, read, places_details_search, places_text_search
 
-cache = {}
+from swag.tools import (
+    SearchInternet,
+    ReadWebsite,
+    SearchForNearbyPlacesOfType,
+    Geocode,
+    GetDistanceMatrix,
+    OptimizeRoute,
+)
+from swag.assistant import Assistant
 
-logging.basicConfig(level=logging.INFO)
+app = FastAPI()
 
-g = geocoder.ip('me')
-st.title("Tourism Assistant")
-if "preferences" not in st.session_state:
-    st.session_state.preferences = []
+assistant = Assistant(
+    client=AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY")),
+    model="claude-3-5-haiku-latest",
+)
 
-st.markdown(f"You are currently in **{g.city}, {g.country}**. Your location is **{g.latlng}**")
-ipt = st.text_input("Tell me about yourself. I can tailor my recommendations to your preferences.")
 
-if st.button("Add to prefrences"):
-    st.session_state.preferences.append(ipt)
+class UserPreference(BaseModel):
+    preference: str
 
-if st.session_state.preferences:
-    st.markdown("Your preferences are:")
-    for id, pref in enumerate(st.session_state.preferences):
-        st.markdown(f"**{pref}**")
-        delete = st.button("Delete?", key=id)
-        if delete:
-            st.session_state.preferences.remove(pref)
 
-st.markdown("---")
-col1, col2, col3 = st.columns([1, 1, 1])
+class Query(BaseModel):
+    query_type: str  # 'restaurant' or 'place' or 'trip'
+    query: str
 
-with col1:
-    fr = st.button("Find restaurants?")
 
-with col3:
-    wtg = st.button("Where to go?")
+# In-memory storage for preferences (might be replaced with a database later)
+user_preferences: List[str] = []
 
-if fr:
-    with st.spinner("Finding restaurants..."):
-        system = f"You are an AI assistant helping a user find restaurants in {g.city}, {g.country}. The user is looking for a place to eat. The user has some preferences: {"\n".join(st.session_state.preferences)}. Your goal is to build a report of the top 5 restaurants that might suit the useres preferences, including recommended menu options, expected price to eat there & overall restaurant rating. Prior to starting, detail what you plan to do in order to complete your task. You may adjust this plan as you go, reflecting on the information you find. You should update the user when you change your plan."
-        messages: list[MessageParam] = [{"role": "user", "content": "Help me find a restaurant!"}]
-        tools = [convert_pydantic_to_anthropic_schema(tool) for tool in [SearchInternet, ReadWebsite, PlacesDetailsSearch, PlacesTextSearch]]
 
-        response = query_claude(messages, system, tools)
-        tool_use = response.stop_reason == "tool_use"
-        content = response.content
-        messages.append({"role": "assistant", "content": content})
+@app.get("/location")
+async def get_location():
+    g = geocoder.ip("me")
+    return {"city": g.city, "country": g.country, "latlng": g.latlng}
 
-        while tool_use:
-            for c in content:
-                if type(c) is TextBlock:
-                    st.write(c.text)
-                if type(c) is ToolUseBlock:
-                    st.write(f"Making a tool use request to {c.name}, with input: {c.input}")
-                    if c.name == "SearchInternet":
-                        tool_result, cache = search(SearchInternet(**c.input), cache) # type: ignore
-                    elif c.name == "ReadWebsite":
-                        tool_result = read(ReadWebsite(**c.input), cache) # type: ignore
-                    elif c.name == "PlacesTextSearch":
-                        tool_result = places_text_search(PlacesTextSearch(**c.input)) # type: ignore
-                    elif c.name == "PlacesDetailsSearch":
-                        tool_result = places_details_search(PlacesDetailsSearch(**c.input)) # type: ignore
-                    else:
-                        raise ValueError(f"Unknown tool: {c.name}")
-                    new_input: list[dict[str, str|bool]] = [{
-                        "type": "tool_result",
-                        "tool_use_id": c.id,
-                        "content": tool_result,
-                        "is_error": False,
-                    }]
-                    messages.append({"role": "user", "content": new_input})
-            print(messages)
-            response = query_claude(messages, system, tools)
-            content = response.content
-            tool_use = response.stop_reason == "tool_use"
-            messages.append({"role": "assistant", "content": content})
-        
-        if type(content[0]) is TextBlock:
-            st.write(content[0].text)
 
-if wtg:
-    with st.spinner(f"Finding cool places to go in {g.city}..."):
-        system = f"You are an AI assistant helping a user find places to go in {g.city}, {g.country}. The user is looking for a place to visit. The user has some preferences: {"\n".join(st.session_state.preferences)}. You may use chain of thought approaches to help the user find a place to visit. They are looking for non-restaurant locations. You should find locations based on the user's preferences."
+@app.post("/add_preference")
+async def add_preference(preference: UserPreference):
+    user_preferences.append(preference.preference)
+    return {"message": f"Added preference: {preference.preference}"}
 
-        messages: list[MessageParam] = [{"role": "user", "content": "Help me find a place to visit!"}]
-        tools = [convert_pydantic_to_anthropic_schema(tool) for tool in [SearchInternet, ReadWebsite]]
 
-        response = query_claude(messages, system, tools)
-        tool_use = response.stop_reason == "tool_use"
-        content = response.content
-        messages.append({"role": "assistant", "content": content})
+@app.get("/preferences")
+async def get_preferences():
+    return {"preferences": user_preferences}
 
-        while tool_use:
-            condensed_messages = []
-            old_user = False
-            for c in content:
-                if type(c) is TextBlock:
-                    st.write(c.text)
-                if type(c) is ToolUseBlock:
-                    st.write(f"Making a tool use request to {c.name}, with input: {c.input}")
-                    if c.name == "SearchInternet":
-                        tool_result = search(SearchInternet(**c.input))
-                        print(tool_result[0:1000])
-                    elif c.name == "ReadWebsite":
-                        tool_result = read(ReadWebsite(**c.input))
-                        print(tool_result[0:1000])
-                    else:
-                        raise ValueError(f"Unknown tool: {c.name}")
-                    
-                    new_input: list[dict[str, str|bool]] = [{
-                        "type": "tool_result",
-                        "tool_use_id": c.id,
-                        "content": tool_result,
-                        "is_error": False,
-                    }]
-                    messages.append({"role": "user", "content": new_input})
-            response = query_claude(condensed_messages, system, tools)
-            content = response.content
-            tool_use = response.stop_reason == "tool_use"
-            messages.append({"role": "assistant", "content": content})
 
-        if type(content[0]) is TextBlock:
-            st.write(content[0].text)
+@app.post("/query_assistant")
+async def query_assistant(
+    query: Query, preferences: List[str] = Depends(get_preferences)
+):
+    g = geocoder.ip("me")
+    preferences_str = ", ".join(user_preferences)
+    location_str = f"{g.city}, {g.country}"
+
+    async def generate_response():
+        if query.query_type == "trip":
+            system_trip = """
+            You are an AI trip planner.
+            The user wants to travel, given a set of places and waypoints.
+
+            Your goal is to create a detailed trip plan including:
+            1. Route information (directions, distances, estimated travel times).
+            2. Suggested activities and attractions along the route and at the destination.
+            3. Potential accommodation options at the destination.
+            4. Any relevant warnings or advisories for the trip (e.g., road closures, weather).
+
+            Use tools to gather the necessary information. Provide the plan.
+            """
+            assistant.system = system_trip
+            assistant.define_tools(
+                [SearchInternet, ReadWebsite, Geocode, GetDistanceMatrix, OptimizeRoute]
+            )
+        elif query.query_type in ["restaurant", "place"]:
+            system_template = """
+            You are an AI assistant helping a user find {query_type}s in {location}.
+            The user is looking for a {query_type} to {action}.
+            The user's preferences are: {preferences_str}.
+            Your goal is to build a report of the top 5 {query_type}s that might suit the user's preferences,
+            including {additional_info}."""
+
+            additional_info = (
+                "recommended menu options, expected price to eat there & overall restaurant rating"
+                if query.query_type == "restaurant"
+                else "recommended activities, expected costs & overall ratings"
+            )
+
+            action = "eat" if query.query_type == "restaurant" else "visit"
+
+            assistant.system = system_template.format(
+                query_type=query.query_type,
+                location=location_str,
+                preferences_str=preferences_str,
+                additional_info=additional_info,
+                action=action
+            )
+            assistant.define_tools([SearchInternet, ReadWebsite, SearchForNearbyPlacesOfType])
+        else:
+            yield f"Invalid query type: {query.query_type}. Supported types are 'restaurant', 'place', and 'trip'."
+            return
+
+        # Use async for to iterate over the assistant's response
+        async for response_chunk in assistant(query.query):
+            yield response_chunk
+
+    return StreamingResponse(generate_response(), media_type="text/plain")
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, port=8000)

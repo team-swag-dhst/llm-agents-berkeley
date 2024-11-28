@@ -15,7 +15,7 @@ config = "configs/sam2.1/sam2.1_hiera_t.yaml"
 
 predictor = SAM2ImagePredictor(build_sam2(config, checkpoint))
 
-class SamRequest(BaseModel): 
+class SamRequest(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     image: str
@@ -42,8 +42,8 @@ def predict_mask(request: SamRequest) -> Image.Image:
 
     sorted_ind = np.argsort(scores)[-1]
     mask = masks[sorted_ind]
-    score = scores[sorted_ind]
-    logit = logits[sorted_ind]
+    # score = scores[sorted_ind]
+    # logit = logits[sorted_ind]
 
 
     color = np.array([30/255, 144/255, 255/255, 0.5])
@@ -63,17 +63,17 @@ def predict_mask(request: SamRequest) -> Image.Image:
 
     if point_coords is not None and point_labels is not None:
         draw = ImageDraw.Draw(result)
-        
-        radius = 10 
+
+        radius = 10
         for coord, label in zip(point_coords, point_labels):
             x, y = coord
             color = 'green' if label == 1 else 'red'
-            draw.ellipse([x-radius, y-radius, x+radius, y+radius], 
+            draw.ellipse([x-radius, y-radius, x+radius, y+radius],
                         fill=color)
-            draw.ellipse([x-radius, y-radius, x+radius, y+radius], 
+            draw.ellipse([x-radius, y-radius, x+radius, y+radius],
                         outline='white', width=2)
 
-    
+
     # result.save('output.png')
 
     return result

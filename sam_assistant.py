@@ -17,7 +17,7 @@ def run_sam_assistant(raw_img_path: str, masked_img_path: str, location: str|Non
     import os
     print(f"Raw image exists: {os.path.exists(raw_img_path)}")
     print(f"Masked image exists: {os.path.exists(masked_img_path)}")
-    
+
     cache: dict[str, str] = {}
 
     with open(raw_img_path, "rb") as image_file:
@@ -134,7 +134,7 @@ def run_sam_assistant(raw_img_path: str, masked_img_path: str, location: str|Non
 imgs_with_locations = [("imgs/church.png", "imgs/masked_church.png", "Ouro Preto, Minas Gerais",  -20.385981, -43.504831)]
 
 for raw_img, masked_img, location, lat, lon in imgs_with_locations:
-    
+
     print(f"Running SAM assistant on {raw_img} with location {location}")
     print("="*50)
     run_sam_assistant(raw_img, masked_img, location=location, lat=lat, lon=lon)
