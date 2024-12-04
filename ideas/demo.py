@@ -26,7 +26,10 @@ async def query_assistant(query_type, query):
         async with client.stream(
             "POST",
             "http://localhost:8000/query_assistant",
-            json={"query_type": query_type, "query": query}, timeout=None) as response: async for chunk in response.aiter_text():
+            json={"query_type": query_type, "query": query},
+            timeout=None
+        ) as response:
+            async for chunk in response.aiter_text():
                 yield chunk
 
 # Sidebar for managing preferences
