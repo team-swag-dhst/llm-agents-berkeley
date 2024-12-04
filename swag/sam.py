@@ -1,4 +1,3 @@
-from pydantic import BaseModel, ConfigDict
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 from sam2.build_sam import build_sam2
 from pathlib import Path
@@ -15,21 +14,13 @@ config = "configs/sam2.1/sam2.1_hiera_t.yaml"
 
 predictor = SAM2ImagePredictor(build_sam2(config, checkpoint))
 
-class SamRequest(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    image: str
-    clicks: list[list[int]]
-
-
-
-def predict_mask(request: SamRequest) -> Image.Image:
-    image_bytes = base64.b64decode(request.image)
+def predict_mask(og_image: str, clicks: list[list[int]]) -> Image.Image:
+    image_bytes = base64.b64decode(og_image)
     pil_img = Image.open(BytesIO(image_bytes))
     img = np.array(pil_img.convert("RGB"))
 
-    point_coords = np.array(request.clicks)
-    point_labels = np.array([1 for _ in range(len(request.clicks))])
+    point_coords = np.array(clicks)
+    point_labels = np.array([1 for _ in range(len(clicks))])
 
     with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
         predictor.set_image(img)
@@ -73,17 +64,12 @@ def predict_mask(request: SamRequest) -> Image.Image:
             draw.ellipse([x-radius, y-radius, x+radius, y+radius],
                         outline='white', width=2)
 
-
-    # result.save('output.png')
-
     return result
 
-
-
-image_path = Path(__file__).parent.parent / "imgs" / "dali.png"
-with open(image_path, "rb") as f:
-    image = f.read()
-    image = base64.b64encode(image).decode('utf-8')
-
-clicks = [[100, 100], [200, 200]]
-predict_mask(SamRequest(image=image, clicks=clicks))
+# image_path = Path(__file__).parent.parent / "imgs" / "dali.png"
+# with open(image_path, "rb") as f:
+#     image = f.read()
+#     image = base64.b64encode(image).decode('utf-8')
+# 
+# clicks = [[100, 100], [200, 200]]
+# predict_mask(image, clicks)

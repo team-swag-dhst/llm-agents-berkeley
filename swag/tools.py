@@ -191,7 +191,10 @@ class ToolRegistry:
 
 
 @ToolRegistry.register(SearchInternet)
-def search_internet(request: SearchInternet) -> tuple[str, dict]:
+def search_internet(
+        request: SearchInternet,
+        cache: dict[str, str]
+) -> tuple[str, dict[str, str]]:
     url = f"https://s.jina.ai/{quote_plus(request.query)}"
     headers = {
         "Accept": "application/json",
@@ -204,10 +207,13 @@ def search_internet(request: SearchInternet) -> tuple[str, dict]:
 
     return_value = []
     for item in data:
+        content = item.pop('content', None)
+        if len(content) > 0:
+            cache[item['url']] = content
         return_value.append(item)
 
     logging.info(f"`search_internet`: {return_value}")
-    return json.dumps(return_value)
+    return json.dumps(return_value), cache
 
 
 @ToolRegistry.register(ReadWebsite)

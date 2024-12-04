@@ -14,8 +14,13 @@ class EverywhereTourGuideRequest(BaseModel):
     lat: float = Field(description="Latitude of the user")
     lon: float = Field(description="Longitude of the user")
 
-def research_main(request: EverywhereTourGuideRequest) -> Generator[str, Any, None]:
-
+def run_everywhere_tour_guide(
+        base_image: str,
+        masked_image: str,
+        location: str,
+        lat: float,
+        lon: float
+) -> Generator[str, Any, None]:
     cache : dict[str, str] = {}
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
     tools: list = [convert_pydantic_to_anthropic_schema(tool) for tool in [SearchInternet, ReadWebsite, SearchForNearbyPlacesOfType]]
@@ -26,14 +31,14 @@ def research_main(request: EverywhereTourGuideRequest) -> Generator[str, Any, No
                 "type": "image",
                 "source": {
                     "type": "base64",
-                    "data": request.base_image,
+                    "data": base_image,
                     "media_type": "image/png"}
                 },
             {
                 "type": "image",
                 "source": {
                     "type": "base64",
-                    "data": request.masked_image,
+                    "data": masked_image,
                     "media_type": "image/png"
                     }
             },
@@ -43,7 +48,7 @@ def research_main(request: EverywhereTourGuideRequest) -> Generator[str, Any, No
             }
         ]
     }]
-    system = str(SamAssistantPrompt(location=request.location, lat=request.lat, lon=request.lon))
+    system = str(SamAssistantPrompt(location=location, lat=lat, lon=lon))
 
     response = client.messages.create(
             model="claude-3-5-sonnet-latest",
@@ -71,7 +76,7 @@ def research_main(request: EverywhereTourGuideRequest) -> Generator[str, Any, No
                         tool_result = read_website(ipt, cache)
                     elif c.name == "SearchForNearbyPlacesOfType":
                         ipt = SearchForNearbyPlacesOfType(**c.input) # type: ignore
-                        tool_result = search_for_nearby_places_of_type(ipt, request.lat, request.lon)
+                        tool_result = search_for_nearby_places_of_type(ipt, lat, lon)
                     else:
                         raise ValueError(f"Unknown tool: {c.name}")
 

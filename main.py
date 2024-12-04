@@ -6,9 +6,10 @@ from typing import List
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from fastapi import FastAPI, Depends
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from anthropic import AsyncAnthropic
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+from io import BytesIO
 import geocoder
 
 from swag.tools import (
@@ -20,6 +21,8 @@ from swag.tools import (
     OptimizeRoute,
 )
 from swag.assistant import Assistant
+from swag.sam import predict_mask
+from swag.everywhere_tour_guide import run_everywhere_tour_guide
 
 app = FastAPI()
 
@@ -28,10 +31,27 @@ assistant = Assistant(
     model="claude-3-5-haiku-latest",
 )
 
+class SamRequest(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    image: str
+    clicks: list[list[int]]
+
+class TourGuideRequest(BaseModel):
+    base_image: str
+    masked_image: str
+    location: str
+    lat: float
+    lon: float
+
+class BaseRequest(BaseModel):
+    query: str = ""
+    query_type: str = ""
+    image: str = ""
+    masked_img: str = ""
+    clicks: list[list[int]] = []
 
 class UserPreference(BaseModel):
     preference: str
-
 
 class Query(BaseModel):
     query_type: str  # 'restaurant' or 'place' or 'trip'
@@ -58,11 +78,33 @@ async def add_preference(preference: UserPreference):
 async def get_preferences():
     return {"preferences": user_preferences}
 
+@app.post("/tourguide")
+async def query_everywhere_tourguide(
+        request: TourGuideRequest, location: dict[str, str] = Depends(get_location)
+):
+    if not request.location:
+        request.location = f"{location['city']}, {location['country']}"
+
+    if not request.lat or not request.lon:
+        request.lat, request.lon = float(location["latlng"][0]), float(location["latlng"][1])
+    
+    return StreamingResponse(
+            run_everywhere_tour_guide(
+                request.base_image,
+                request.masked_image,
+                request.location,
+                request.lat,
+                request.lon
+            ),
+            media_type="text/event-stream"
+    )
+
 
 @app.post("/query_assistant")
 async def query_assistant(
-    query: Query, preferences: List[str] = Depends(get_preferences)
+    query: Query, preferences: dict[str, list[str]] = Depends(get_preferences)
 ):
+    user_preferences = preferences["preferences"]
     g = geocoder.ip("me")
     preferences_str = ", ".join(user_preferences)
     location_str = f"{g.city}, {g.country}"
@@ -106,8 +148,7 @@ async def query_assistant(
                 location=location_str,
                 preferences_str=preferences_str,
                 additional_info=additional_info,
-                action=action
-            )
+                action=action)
             assistant.define_tools([SearchInternet, ReadWebsite, SearchForNearbyPlacesOfType])
         else:
             yield f"Invalid query type: {query.query_type}. Supported types are 'restaurant', 'place', and 'trip'."
@@ -119,6 +160,16 @@ async def query_assistant(
 
     return StreamingResponse(generate_response(), media_type="text/plain")
 
+@app.post("/sam")
+async def sam(request: SamRequest):
+    image = predict_mask(request.image, request.clicks)
+    img_byte_arr = BytesIO()
+    image.save(img_byte_arr, format='PNG')
+    img_byte_arr = img_byte_arr.getvalue()
+    return Response(
+        content=img_byte_arr,
+        media_type="image/png"
+    )
 
 if __name__ == "__main__":
     import uvicorn
