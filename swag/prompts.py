@@ -13,3 +13,13 @@ class SamAssistantPrompt(BaseModel):
     def __str__(self) -> str:
         formatted_guidelines = "\n".join(self.guidelines)
         return f"{self.task}\n\n<guidelines>\n{formatted_guidelines}</guidelines>\n<users_currention_location>{self.location}, lat: {self.lat}, lon: {self.lon}</users_currention_location>\n{self.final_remarks}"
+
+class ToolRetriever(BaseModel):
+
+    task: str = "Given a set of tools (<tools></tools>), and a query from the user you are tasked with finding the most useful tools in solving this hypothetical query. Since you are an expert in tool retrieval, you are expected to provide the most relevant tools for the query. This is your time to shine, show off your expertise in tool retrieval. Do not worry if you don't have all the context required to answer the query, pretend that you know exactly what to do when you receive the query and determine the relevant tools. Your response should a list of tools in the form <relevant_tools>tool_1, tool_2, ...</relevant_tools>. You should return at minimum 5 tools."
+    tools: list[str]
+
+    def __str__(self) -> str:
+        formatted_tools = "\n".join(self.tools)
+        return f"{self.task}\n\n<tools>\n{formatted_tools}</tools>"
+
