@@ -12,4 +12,4 @@ class SamAssistantPrompt(BaseModel):
 
     def __str__(self) -> str:
         formatted_guidelines = "\n".join(self.guidelines)
-        return f"{self.task}\n\n<guidelines>\n{formatted_guidelines}</guidelines>\n<users_currention_location>{self.location}, lat: {self.lat}, lon: {self.lon}</users_currention_location>\n{self.final_remarks}"
+        return f"{self.task}\n\n<guidelines>\n{formatted_guidelines}</guidelines>\n<users_current_location>{self.location}, lat: {self.lat}, lon: {self.lon}</users_current_location>\n{self.final_remarks}"

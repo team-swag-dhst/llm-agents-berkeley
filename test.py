@@ -15,7 +15,7 @@ def tourguide():
     with open(masked_img_path, "rb") as img_file:
         masked_img = base64.b64encode(img_file.read()).decode("utf-8")
 
-    url = "http://localhost:8080/tourguide"
+    url = "http://localhost:8000/tourguide"
 
     request_body = {
         "base_image": base_img,
@@ -37,7 +37,7 @@ def sam():
         base_img = base64.b64encode(base_img).decode('utf-8')
 
     clicks = [[100, 100], [200, 200]]
-    url = "http://localhost:8080/sam"
+    url = "http://localhost:8000/sam"
 
     request_body = {
         "image": base_img,
@@ -48,5 +48,4 @@ def sam():
     with open("response_output.png", "wb") as f:
         f.write(response.content)
 
-sam()
-
+tourguide()
