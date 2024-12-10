@@ -3,11 +3,15 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "homepage": "https://diwakarang.github.io/llm-agents-berkeley",
   "scripts": {
     "start": "vite --port=4200",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist",
+    "clean":"rm -rf dist"
   },
   "dependencies": {
     "react": "^18.3.1",
