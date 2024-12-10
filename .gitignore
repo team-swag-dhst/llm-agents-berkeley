@@ -6,3 +6,4 @@ sam2/
 sam-checkpoints
 draft/
 swags/
+frontend/node_modules/*
