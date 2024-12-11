@@ -11,12 +11,9 @@
 
 
 <!-- TODO -->
-[ ] Add msw, test with mock stream data.
-
-[ ] Hit APIs and collect mock APIs.
-
-[ ] Add image handling capabilities.
-
-[ ] Try to get image and display in chat.
-
-[ ] Capture click positions and send
+- [ ]  Clarify APIs 
+- [ ] Add msw, test with mock stream data.
+- [ ] Hit APIs and collect mock APIs.
+- [ ] Add image handling capabilities.
+- [ ] Try to get image and display in chat.
+- [ ] Capture click positions and send
