@@ -1,0 +1,8 @@
+venv
+.env
+vids/
+**/__pycache__/
+sam2/
+sam-checkpoints
+draft/
+swags/
