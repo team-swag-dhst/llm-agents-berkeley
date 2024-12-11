@@ -1,11 +1,10 @@
 from pydantic import BaseModel, Field
 import anthropic
 import os
-from typing import  AsyncGenerator, Any
-import logging
+from typing import  AsyncGenerator
 
-from swag.assistant import convert_pydantic_to_anthropic_schema
-from swag.tools import SearchInternet, ReadWebsite, SearchForNearbyPlacesOfType, search_internet, read_website, search_for_nearby_places_of_type
+from swag.assistant import Assistant 
+from swag.tools import SearchInternet, ReadWebsite, SearchForNearbyPlacesOfType
 from swag.prompts import SamAssistantPrompt
 
 class EverywhereTourGuideRequest(BaseModel):
@@ -23,90 +22,18 @@ async def run_everywhere_tour_guide(
         lon: float
 ) -> AsyncGenerator[str, None]:
     # cache : dict[str, str] = {}
-    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-    tools: list = [convert_pydantic_to_anthropic_schema(tool) for tool in [SearchInternet, ReadWebsite, SearchForNearbyPlacesOfType]]
-    messages: list = [{
-        "role": "user",
-        "content": [
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "data": base_image,
-                    "media_type": "image/jpeg"}
-                },
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "data": masked_image,
-                    "media_type": "image/jpeg"
-                    }
-            },
-            {
-                "type": "text",
-                "text": "Tell me about the object in the blue area surrounded by the white line."
-            }
-        ]
-    }]
+    client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    tools = [SearchInternet, ReadWebsite, SearchForNearbyPlacesOfType]
+    prompt = "Tell me about the object in the blue area surrounded by the white line."
     system = str(SamAssistantPrompt(location=location, lat=lat, lon=lon))
 
 
-    response = client.messages.create(
-            model="claude-3-5-sonnet-latest",
-            system=system,
-            max_tokens=1024,
-            messages=messages,
-            tools=tools
+    assistant = Assistant(
+        client=client,
+        model="claude-3-5-sonnet-latest",
+        system=system,
+        tools=tools
     )
-    tool_use = response.stop_reason == "tool_use"
-    messages.append({"role": "assistant", "content": response.content})
 
-    while tool_use:
-        tool_use = response.stop_reason == "tool_use"
-        for c in response.content:
-            if type(c) is anthropic.types.TextBlock:
-                text = c.text
-                logging.info(f"Assistant: {text}")
-                yield text
-            if type(c) is anthropic.types.ToolUseBlock:
-                msg = f"\nMaking tool use request to {c.name} with input: {c.input}"
-                logging.info(msg)
-                yield msg
-                try:
-                    if c.name == "SearchInternet":
-                        ipt = SearchInternet(**c.input) # type: ignore
-                        tool_result = search_internet(ipt)
-                    elif c.name == "ReadWebsite":
-                        ipt = ReadWebsite(**c.input) # type: ignore
-                        tool_result = read_website(ipt)
-                    elif c.name == "SearchForNearbyPlacesOfType":
-                        ipt = SearchForNearbyPlacesOfType(**c.input) # type: ignore
-                        tool_result = search_for_nearby_places_of_type(ipt)
-                    else:
-                        raise ValueError(f"Unknown tool: {c.name}")
-
-                    is_error = False
-                except Exception as e:
-                    tool_result = str(e)
-                    is_error = True
-
-                new_input = [{
-                    "type": "tool_result",
-                    "tool_use_id": c.id,
-                    "content": tool_result,
-                    "is_error": is_error,
-                }]
-                messages.append({"role": "user", "content": new_input})
-
-        if tool_use:
-            response = client.messages.create(
-                    model="claude-3-5-sonnet-latest",
-                    system=system,
-                    max_tokens=1024,
-                    messages=messages,
-                    tools=tools
-            )
-            messages.append({"role": "assistant", "content": response.content})
-
-    yield "\nProcess complete."
+    async for chunk in assistant(prompt=prompt, images=[base_image, masked_image]):
+        yield chunk

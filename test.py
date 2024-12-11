@@ -26,12 +26,11 @@ def tourguide():
         "lon": lon
     }
 
-    with open("tourguide_request.json", "w") as f:
-        f.write(json.dumps(request_body))
 
-    # response = requests.post(url, json=request_body, stream=True)
-    # for line in response.iter_lines():
-    #     print(line.decode("utf-8"))
+
+    response = requests.post(url, json=request_body, stream=True)
+    for line in response.iter_lines():
+        print(line.decode("utf-8"))
 
 def sam():
 
