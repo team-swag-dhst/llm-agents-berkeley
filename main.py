@@ -45,13 +45,7 @@ class TourGuideRequest(BaseModel):
     location: str
     lat: float
     lon: float
-
-class BaseRequest(BaseModel):
-    query: str = ""
-    query_type: str = ""
-    image: str = ""
-    masked_img: str = ""
-    clicks: list[list[int]] = []
+    stream: bool = True
 
 class UserPreference(BaseModel):
     preference: str
@@ -59,6 +53,7 @@ class UserPreference(BaseModel):
 class Query(BaseModel):
     query_type: str  # 'restaurant' or 'place' or 'trip'
     query: str
+    stream: bool = True
 
 
 # In-memory storage for preferences (might be replaced with a database later)
@@ -90,17 +85,21 @@ async def query_everywhere_tourguide(
 
     if not request.lat or not request.lon:
         request.lat, request.lon = float(location["latlng"][0]), float(location["latlng"][1])
-        
-    return StreamingResponse(
-            run_everywhere_tour_guide(
-                request.base_image,
-                request.masked_image,
-                request.location,
-                request.lat,
-                request.lon
-            ),
-            media_type="text/plain"
-    )
+
+    if request.stream:   
+        return StreamingResponse(
+                run_everywhere_tour_guide(
+                    request.base_image,
+                    request.masked_image,
+                    request.location,
+                    request.lat,
+                    request.lon
+                ),
+                media_type="text/plain"
+        )
+
+    response = "".join([chunk async for chunk in run_everywhere_tour_guide(request.base_image, request.masked_image, request.location, request.lat, request.lon)])
+    return response
 
 
 @app.post("/query_assistant")
@@ -160,8 +159,11 @@ async def query_assistant(
         # Use async for to iterate over the assistant's response
         async for response_chunk in assistant(query.query):
             yield response_chunk
-
-    return StreamingResponse(generate_response(), media_type="text/plain")
+    
+    if query.stream:
+        return StreamingResponse(generate_response(), media_type="text/plain")
+    else:
+        return "".join([chunk async for chunk in generate_response()])
 
 @app.post("/sam")
 async def sam(request: SamRequest):
