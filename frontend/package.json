@@ -1,9 +1,9 @@
 {
   "name": "team-swag-chat",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
-  "homepage": "https://diwakarang.github.io/llm-agents-berkeley",
+  "homepage": "https://team-swag-dhst.github.io/llm-agents-berkeley",
   "scripts": {
     "start": "vite --port=4200",
     "build": "tsc -b && vite build",
