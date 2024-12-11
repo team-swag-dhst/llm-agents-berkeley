@@ -54,7 +54,7 @@ class Assistant:
         images: List[str] | None = None,
     ) -> AsyncGenerator[str, None]:
         if len(self.messages) >= 2 * self.max_steps:
-            yield f"Maximum number of steps {self.max_steps} reached. Please start a new conversation."
+            yield f"\nMaximum number of steps {self.max_steps} reached. Please start a new conversation."
             return
         if prompt:
             message = {"role": "user", "content": [{"type": "text", "text": prompt}]}
@@ -85,9 +85,9 @@ class Assistant:
 
             for content in response.content:
                 if isinstance(content, TextBlock):
-                    yield content.text
+                    yield f"\n{content.text}"
                 elif isinstance(content, ToolUseBlock):
-                    yield f"Making a call to tool function {content.name} with input {content.input}."
+                    yield f"\nMaking a call to tool function {content.name} with input {content.input}."
                     tool_function, tool_model = ToolRegistry.get(content.name)
                     is_error = False
                     try:
@@ -98,13 +98,13 @@ class Assistant:
                             else:
                                 tool_result = tool_function(**content.input)
 
-                            yield "Tool function executed successfully."
+                            yield "\nTool function executed successfully."
                         else:
                             raise ValueError(f"Tool function {content.name} not found")
                     except Exception as e:
                         is_error = True
                         tool_result = str(e)
-                        yield "An error occurred when trying to interact with the tool."
+                        yield "\nAn error occurred when trying to interact with the tool."
 
                     new_input = [{
                         "type": "tool_result",
