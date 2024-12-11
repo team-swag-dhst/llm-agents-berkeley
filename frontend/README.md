@@ -10,7 +10,7 @@
 `npm i && npm run build && npm run deploy`
 
 
-<!-- TODO -->
+### TODO 
 - [ ]  Clarify APIs 
 - [ ] Add msw, test with mock stream data.
 - [ ] Hit APIs and collect mock APIs.
