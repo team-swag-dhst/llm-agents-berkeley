@@ -52,6 +52,8 @@ class SearchForNearbyPlacesOfType(BaseModel):
     include_photos: bool = Field(
         description="Whether to include photos in the response.", default=False
     )
+    lat: float = Field(description="The latitude of the user's location.")
+    lon: float = Field(description="The longitude of the user's location.")
 
     @model_validator(mode="after")
     def validate_types(self) -> Self:
@@ -193,38 +195,32 @@ class ToolRegistry:
 @ToolRegistry.register(SearchInternet)
 def search_internet(
         request: SearchInternet,
-        cache: dict[str, str]
-) -> tuple[str, dict[str, str]]:
+) -> str:
     url = f"https://s.jina.ai/{quote_plus(request.query)}"
     headers = {
         "Accept": "application/json",
         "Authorization": f"Bearer {os.environ['JINAI_API_KEY']}",
         "X-Retain-Images": "none",
-        "X-With-Generated-Alt": "true",
     }
-    response = requests.get(url, headers=headers, verify=False)
+    response = requests.get(url, headers=headers, verify=True)
     data: list[dict[str, Any]] = response.json()["data"]
 
     return_value = []
     for item in data:
-        content = item.pop('content', None)
-        if len(content) > 0:
-            cache[item['url']] = content
+        _ = item.pop('content', None)
         return_value.append(item)
-
-    logging.info(f"`search_internet`: {return_value}")
-    return json.dumps(return_value), cache
+    
+    logging.info("Received response from: `search_internet`")
+    return json.dumps(return_value)
 
 
 @ToolRegistry.register(ReadWebsite)
-def read_website(request: ReadWebsite, cache: dict[str, str]) -> str:
-    if request.url in cache:
-        return cache[request.url]
+def read_website(request: ReadWebsite) -> str:
 
     url = f"https://r.jina.ai/{request.url}"
     headers = {"Authorization": f"Bearer {os.environ['JINAI_API_KEY']}"}
-    response = requests.get(url, headers=headers, verify=False)
-    logging.info(f"`read_website` (truncated): {response.text[:1000]}")
+    response = requests.get(url, headers=headers, verify=True)
+    logging.info("Received response from: `read_website`")
     return response.text
 
 
@@ -259,7 +255,7 @@ def search_google_maps_with_text(request: SearchGoogleMapsWithText) -> str:
 
 @ToolRegistry.register(SearchForNearbyPlacesOfType)
 def search_for_nearby_places_of_type(
-    request: SearchForNearbyPlacesOfType, lat: float, lon: float
+    request: SearchForNearbyPlacesOfType
 ) -> str:
     url = "https://places.googleapis.com/v1/places:searchNearby"
     fields = "places.id,places.displayName,places.rating"
@@ -274,7 +270,7 @@ def search_for_nearby_places_of_type(
         "includedTypes": request.types,
         "maxResultCount": 10,
         "locationRestriction": {
-            "circle": {"center": {"latitude": lat, "longitude": lon}, "radius": 100}
+            "circle": {"center": {"latitude": request.lat, "longitude": request.lon}, "radius": 100}
         },
     }
     response = requests.post(url, headers=headers, json=payload)

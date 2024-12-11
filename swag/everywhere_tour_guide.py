@@ -1,7 +1,8 @@
 from pydantic import BaseModel, Field
 import anthropic
 import os
-from typing import  Generator, Any
+from typing import  AsyncGenerator, Any
+import logging
 
 from swag.assistant import convert_pydantic_to_anthropic_schema
 from swag.tools import SearchInternet, ReadWebsite, SearchForNearbyPlacesOfType, search_internet, read_website, search_for_nearby_places_of_type
@@ -14,14 +15,14 @@ class EverywhereTourGuideRequest(BaseModel):
     lat: float = Field(description="Latitude of the user")
     lon: float = Field(description="Longitude of the user")
 
-def run_everywhere_tour_guide(
+async def run_everywhere_tour_guide(
         base_image: str,
         masked_image: str,
         location: str,
         lat: float,
         lon: float
-) -> Generator[str, Any, None]:
-    cache : dict[str, str] = {}
+) -> AsyncGenerator[str, None]:
+    # cache : dict[str, str] = {}
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
     tools: list = [convert_pydantic_to_anthropic_schema(tool) for tool in [SearchInternet, ReadWebsite, SearchForNearbyPlacesOfType]]
     messages: list = [{
@@ -32,14 +33,14 @@ def run_everywhere_tour_guide(
                 "source": {
                     "type": "base64",
                     "data": base_image,
-                    "media_type": "image/png"}
+                    "media_type": "image/jpeg"}
                 },
             {
                 "type": "image",
                 "source": {
                     "type": "base64",
                     "data": masked_image,
-                    "media_type": "image/png"
+                    "media_type": "image/jpeg"
                     }
             },
             {
@@ -49,6 +50,7 @@ def run_everywhere_tour_guide(
         ]
     }]
     system = str(SamAssistantPrompt(location=location, lat=lat, lon=lon))
+
 
     response = client.messages.create(
             model="claude-3-5-sonnet-latest",
@@ -64,19 +66,23 @@ def run_everywhere_tour_guide(
         tool_use = response.stop_reason == "tool_use"
         for c in response.content:
             if type(c) is anthropic.types.TextBlock:
-                yield c.text
+                text = c.text
+                logging.info(f"Assistant: {text}")
+                yield text
             if type(c) is anthropic.types.ToolUseBlock:
-                yield f"\nMaking tool use request to {c.name} with input: {c.input}"
+                msg = f"\nMaking tool use request to {c.name} with input: {c.input}"
+                logging.info(msg)
+                yield msg
                 try:
                     if c.name == "SearchInternet":
                         ipt = SearchInternet(**c.input) # type: ignore
-                        tool_result, cache = search_internet(ipt, cache)
+                        tool_result = search_internet(ipt)
                     elif c.name == "ReadWebsite":
                         ipt = ReadWebsite(**c.input) # type: ignore
-                        tool_result = read_website(ipt, cache)
+                        tool_result = read_website(ipt)
                     elif c.name == "SearchForNearbyPlacesOfType":
                         ipt = SearchForNearbyPlacesOfType(**c.input) # type: ignore
-                        tool_result = search_for_nearby_places_of_type(ipt, lat, lon)
+                        tool_result = search_for_nearby_places_of_type(ipt)
                     else:
                         raise ValueError(f"Unknown tool: {c.name}")
 
@@ -103,4 +109,4 @@ def run_everywhere_tour_guide(
             )
             messages.append({"role": "assistant", "content": response.content})
 
-    yield ""
+    yield "\nProcess complete."

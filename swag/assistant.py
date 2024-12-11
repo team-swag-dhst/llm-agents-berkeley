@@ -5,6 +5,7 @@ from anthropic.types import TextBlock, ToolUseBlock
 import base64
 from swag.tools import ToolRegistry
 import json
+import logging
 
 
 def convert_pydantic_to_anthropic_schema(model) -> Dict[str, Any]:
@@ -50,30 +51,29 @@ class Assistant:
     async def __call__(
         self,
         prompt: str,
-        image: Optional[str] = None,
+        images: list[str]|None = None,
         current_result: Any = None,
     ) -> AsyncGenerator[str, None]:
+        logging.info(f"Prompt (Truncated): {prompt[:50]}")
         if len(self.messages) >= 2 * self.max_steps:
-            yield json.dumps(
-                {"type": "error", "text": "Maximum number of steps reached."}
-            )
+            yield f"Maximum number of steps {self.max_steps} reached. Please start a new conversation."
             return
 
         message = {"role": "user", "content": [{"type": "text", "text": prompt}]}
         self.messages.append(message)
 
-        if image:
-            image_string = self.load_image_base64(Path(image))
-            message["content"].append(
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/jpeg",
-                        "data": image_string,
-                    },
-                }
-            )
+        if images:
+            for image in images:
+                message["content"].append(
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/jpeg",
+                            "data": image,
+                        },
+                    }
+                )
 
         try:
             response = await self.client.messages.create(
@@ -89,10 +89,15 @@ class Assistant:
             for content in response.content:
                 if isinstance(content, TextBlock):
                     assistant_message["content"].append(content.__dict__)
-                    yield json.dumps(content.__dict__)
+                    text = content.text
+                    logging.info(f"Assistant: {text}")
+                    yield text 
 
                 elif isinstance(content, ToolUseBlock):
-                    yield json.dumps(content.__dict__)
+                    
+                    tool_use = f"Making a call to tool function {content.name} with input {content.input}. "
+                    logging.info(tool_use)
+                    yield tool_use
                     tool_function, tool_model = ToolRegistry.get(content.name)
                     if tool_function:
                         if tool_model:
@@ -105,7 +110,6 @@ class Assistant:
                             "text": f"Tool {content.name} result: {tool_result}",
                         }
                         assistant_message["content"].append(result_content)
-                        yield json.dumps(result_content)
                     else:
                         error_content = {
                             "type": "text",
@@ -118,7 +122,7 @@ class Assistant:
 
             if response.stop_reason == "tool_use":
                 async for chunk in self(
-                    prompt=f"\nFunction {content.name} was called and returned a value of {tool_result}",
+                    prompt=f"Function {content.name} was called and returned a value of {tool_result}",
                     current_result=tool_result,
                 ):
                     yield chunk
@@ -131,7 +135,7 @@ class Assistant:
                         if content["type"] == "text"
                     ]
                 )
-                yield json.dumps({"type": "text", "text": final_response})
+                # yield json.dumps({"type": "text", "text": final_response})
 
         except Exception as e:
             yield json.dumps({"type": "error", "text": f"An error occurred: {str(e)}"})

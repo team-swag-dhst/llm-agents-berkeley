@@ -1,13 +1,14 @@
 import requests
 import base64
+import json
 
 def tourguide():
 
-    base_img_path = "imgs/dali.png"
-    masked_img_path = "imgs/masked_dali.png"
-    location = "Vatican Museums, Vatican City"
-    lat = 41.903
-    lon = 12.454
+    base_img_path = "imgs/trevi.jpg"
+    masked_img_path = "imgs/masked_tf.jpg"
+    location = "Centro Storico, Rome, Italy"
+    lat = 41.90084878412515
+    lon = 12.483514146947476
 
     with open(base_img_path, "rb") as img_file:
         base_img = base64.b64encode(img_file.read()).decode("utf-8")
@@ -25,9 +26,12 @@ def tourguide():
         "lon": lon
     }
 
-    response = requests.post(url, json=request_body, stream=True)
-    for line in response.iter_lines():
-        print(line.decode("utf-8"))
+    with open("tourguide_request.json", "w") as f:
+        f.write(json.dumps(request_body))
+
+    # response = requests.post(url, json=request_body, stream=True)
+    # for line in response.iter_lines():
+    #     print(line.decode("utf-8"))
 
 def sam():
 
@@ -44,8 +48,10 @@ def sam():
         "clicks": clicks
     }
 
-    response = requests.post(url, json=request_body)
-    with open("response_output.png", "wb") as f:
-        f.write(response.content)
+    with open("request.json", "w") as f:
+        f.write(json.dumps(request_body))
+    # response = requests.post(url, json=request_body)
+    # with open("response_output.png", "wb") as f:
+        # f.write(response.content)
 
 tourguide()

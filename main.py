@@ -23,6 +23,9 @@ from swag.tools import (
 from swag.assistant import Assistant
 from swag.sam import predict_mask
 from swag.everywhere_tour_guide import run_everywhere_tour_guide
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
 
@@ -87,7 +90,7 @@ async def query_everywhere_tourguide(
 
     if not request.lat or not request.lon:
         request.lat, request.lon = float(location["latlng"][0]), float(location["latlng"][1])
-    
+        
     return StreamingResponse(
             run_everywhere_tour_guide(
                 request.base_image,
@@ -96,7 +99,7 @@ async def query_everywhere_tourguide(
                 request.lat,
                 request.lon
             ),
-            media_type="text/event-stream"
+            media_type="text/plain"
     )
 
 
