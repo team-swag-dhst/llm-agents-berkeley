@@ -23,13 +23,11 @@ from swag.tools import (
 from swag.assistant import Assistant
 from swag.sam import predict_mask
 from swag.everywhere_tour_guide import run_everywhere_tour_guide
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
-
-assistant = Assistant(
-    client=AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY")),
-    model="claude-3-5-haiku-latest",
-)
 
 class SamRequest(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -42,13 +40,7 @@ class TourGuideRequest(BaseModel):
     location: str
     lat: float
     lon: float
-
-class BaseRequest(BaseModel):
-    query: str = ""
-    query_type: str = ""
-    image: str = ""
-    masked_img: str = ""
-    clicks: list[list[int]] = []
+    stream: bool = True
 
 class UserPreference(BaseModel):
     preference: str
@@ -56,6 +48,7 @@ class UserPreference(BaseModel):
 class Query(BaseModel):
     query_type: str  # 'restaurant' or 'place' or 'trip'
     query: str
+    stream: bool = True
 
 
 # In-memory storage for preferences (might be replaced with a database later)
@@ -87,23 +80,31 @@ async def query_everywhere_tourguide(
 
     if not request.lat or not request.lon:
         request.lat, request.lon = float(location["latlng"][0]), float(location["latlng"][1])
-    
-    return StreamingResponse(
-            run_everywhere_tour_guide(
-                request.base_image,
-                request.masked_image,
-                request.location,
-                request.lat,
-                request.lon
-            ),
-            media_type="text/event-stream"
-    )
+
+    if request.stream:   
+        return StreamingResponse(
+                run_everywhere_tour_guide(
+                    request.base_image,
+                    request.masked_image,
+                    request.location,
+                    request.lat,
+                    request.lon
+                ),
+                media_type="text/plain"
+        )
+
+    response = "".join([chunk async for chunk in run_everywhere_tour_guide(request.base_image, request.masked_image, request.location, request.lat, request.lon)])
+    return response
 
 
 @app.post("/query_assistant")
 async def query_assistant(
     query: Query, preferences: dict[str, list[str]] = Depends(get_preferences)
 ):
+    assistant = Assistant(
+        client=AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY")),
+        model="claude-3-5-haiku-latest",
+    )
     user_preferences = preferences["preferences"]
     g = geocoder.ip("me")
     preferences_str = ", ".join(user_preferences)
@@ -157,18 +158,21 @@ async def query_assistant(
         # Use async for to iterate over the assistant's response
         async for response_chunk in assistant(query.query):
             yield response_chunk
-
-    return StreamingResponse(generate_response(), media_type="text/plain")
+    
+    if query.stream:
+        return StreamingResponse(generate_response(), media_type="text/plain")
+    else:
+        return "".join([chunk async for chunk in generate_response()])
 
 @app.post("/sam")
 async def sam(request: SamRequest):
     image = predict_mask(request.image, request.clicks)
     img_byte_arr = BytesIO()
-    image.save(img_byte_arr, format='PNG')
+    image.save(img_byte_arr, format='JPEG')
     img_byte_arr = img_byte_arr.getvalue()
     return Response(
         content=img_byte_arr,
-        media_type="image/png"
+        media_type="image/jpeg"
     )
 
 if __name__ == "__main__":

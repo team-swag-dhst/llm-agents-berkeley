@@ -5,6 +5,7 @@ from anthropic.types import TextBlock, ToolUseBlock
 import base64
 from swag.tools import ToolRegistry
 import json
+import logging
 
 
 def convert_pydantic_to_anthropic_schema(model) -> Dict[str, Any]:
@@ -49,32 +50,28 @@ class Assistant:
 
     async def __call__(
         self,
-        prompt: str,
-        image: Optional[str] = None,
-        current_result: Any = None,
+        prompt: str | None = None,
+        images: List[str] | None = None,
     ) -> AsyncGenerator[str, None]:
         if len(self.messages) >= 2 * self.max_steps:
-            yield json.dumps(
-                {"type": "error", "text": "Maximum number of steps reached."}
-            )
+            yield f"\nMaximum number of steps {self.max_steps} reached. Please start a new conversation."
             return
-
-        message = {"role": "user", "content": [{"type": "text", "text": prompt}]}
-        self.messages.append(message)
-
-        if image:
-            image_string = self.load_image_base64(Path(image))
-            message["content"].append(
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/jpeg",
-                        "data": image_string,
-                    },
-                }
-            )
-
+        if prompt:
+            message = {"role": "user", "content": [{"type": "text", "text": prompt}]}
+            if images:
+                for image in images:
+                    message["content"].append(
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/jpeg",
+                                "data": image,
+                            },
+                        }
+                    )
+            self.messages.append(message)
+        
         try:
             response = await self.client.messages.create(
                 model=self.model,
@@ -83,58 +80,48 @@ class Assistant:
                 system=self.system or "",
                 messages=self.messages,
             )
-
-            assistant_message = {"role": "assistant", "content": []}
+            
+            self.messages.append({"role": "assistant", "content": response.content})
 
             for content in response.content:
                 if isinstance(content, TextBlock):
-                    assistant_message["content"].append(content.__dict__)
-                    yield json.dumps(content.__dict__)
-
+                    yield f"\n{content.text}"
                 elif isinstance(content, ToolUseBlock):
-                    yield json.dumps(content.__dict__)
+                    yield f"\nMaking a call to tool function {content.name} with input {content.input}."
                     tool_function, tool_model = ToolRegistry.get(content.name)
-                    if tool_function:
-                        if tool_model:
-                            model_instance = tool_model(**content.input)
-                            tool_result = tool_function(model_instance)
-                        else:
-                            tool_result = tool_function(**content.input)
-                        result_content = {
-                            "type": "text",
-                            "text": f"Tool {content.name} result: {tool_result}",
-                        }
-                        assistant_message["content"].append(result_content)
-                        yield json.dumps(result_content)
-                    else:
-                        error_content = {
-                            "type": "text",
-                            "text": f"\nTool function {content.name} not found",
-                        }
-                        assistant_message["content"].append(error_content)
-                        yield json.dumps(error_content)
+                    is_error = False
+                    try:
+                        if tool_function:
+                            if tool_model:
+                                model_instance = tool_model(**content.input)
+                                tool_result = tool_function(model_instance)
+                            else:
+                                tool_result = tool_function(**content.input)
 
-            self.messages.append(assistant_message)
+                            yield "\nTool function executed successfully."
+                        else:
+                            raise ValueError(f"Tool function {content.name} not found")
+                    except Exception as e:
+                        is_error = True
+                        tool_result = str(e)
+                        yield "\nAn error occurred when trying to interact with the tool."
+
+                    new_input = [{
+                        "type": "tool_result",
+                        "tool_use_id": content.id,
+                        "content": tool_result,
+                        "is_error": is_error,
+                    }]
+                    self.messages.append({"role": "user", "content": new_input})
+
 
             if response.stop_reason == "tool_use":
-                async for chunk in self(
-                    prompt=f"\nFunction {content.name} was called and returned a value of {tool_result}",
-                    current_result=tool_result,
-                ):
+                async for chunk in self():
                     yield chunk
-
-            else:
-                final_response = "\n".join(
-                    [
-                        content["text"]
-                        for content in assistant_message["content"]
-                        if content["type"] == "text"
-                    ]
-                )
-                yield json.dumps({"type": "text", "text": final_response})
 
         except Exception as e:
             yield json.dumps({"type": "error", "text": f"An error occurred: {str(e)}"})
+            return
 
     @staticmethod
     def load_image_base64(file_path: Path) -> str:
