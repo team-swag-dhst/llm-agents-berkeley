@@ -168,11 +168,11 @@ async def query_assistant(
 async def sam(request: SamRequest):
     image = predict_mask(request.image, request.clicks)
     img_byte_arr = BytesIO()
-    image.save(img_byte_arr, format='PNG')
+    image.save(img_byte_arr, format='JPEG')
     img_byte_arr = img_byte_arr.getvalue()
     return Response(
         content=img_byte_arr,
-        media_type="image/png"
+        media_type="image/jpeg"
     )
 
 if __name__ == "__main__":
