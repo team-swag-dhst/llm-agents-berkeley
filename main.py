@@ -29,11 +29,6 @@ logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
 
-assistant = Assistant(
-    client=AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY")),
-    model="claude-3-5-haiku-latest",
-)
-
 class SamRequest(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     image: str
@@ -106,6 +101,10 @@ async def query_everywhere_tourguide(
 async def query_assistant(
     query: Query, preferences: dict[str, list[str]] = Depends(get_preferences)
 ):
+    assistant = Assistant(
+        client=AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY")),
+        model="claude-3-5-haiku-latest",
+    )
     user_preferences = preferences["preferences"]
     g = geocoder.ip("me")
     preferences_str = ", ".join(user_preferences)
