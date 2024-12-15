@@ -9,6 +9,8 @@
 ## Deploy fresh
 `npm i && npm run build && npm run deploy`
 
+## Run Local with Mocks
+`npm I && npm run debug`
 
 ### TODO 
 - [ ]  Clarify APIs 
