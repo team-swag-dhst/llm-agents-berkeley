@@ -25,14 +25,14 @@ export const Chat = () => {
     reader.readAsDataURL(selectedFile);
 
     reader.onload = () => {
-      console.log("called: ", reader);
-      console.log("base64 img result", reader.result);
+      // console.log("called: ", reader);
+      // console.log("base64 img result", reader.result);
       setBase64IMG(reader.result);
     };
   };
   const handleUpload = (params: any) => {
     const files = params.files;
-    console.log("Selected Files", files);
+    // console.log("Selected Files", files);
     convertToBase64(files[0]);
     // handle files logic here
   };
@@ -60,18 +60,11 @@ export const Chat = () => {
         return;
       },
       message: (params) => {
-        setisLoading(true);
-        setTimeout(() => {
-          setProcessedImg(
-            mockImagesList[_.random(0, mockImagesList.length - 1, false)]
-          );
-          setisLoading(false);
-        }, 5000);
-        return `Your photo is being processed pls. wait. (${params.userInput}) We will get back to you shortly!`;
+        return `Thank you`;
       },
-      options: ["showImage"],
-      path: "showImage",
-      chatDisabled: false,
+      options: ["start"],
+      path: "start",
+      chatDisabled: true,
     },
     processing: {
       message: "Your photo is being processed , Pls. wait ...",
@@ -79,9 +72,9 @@ export const Chat = () => {
       chatDisabled: true,
       path: (params) => {
         setTimeout(async () => {
-          setProcessedImg(
-            mockImagesList[_.random(0, mockImagesList.length - 1, false)]
-          );
+          // setProcessedImg(
+          //   mockImagesList[_.random(0, mockImagesList.length - 1, false)]
+          // );
           setisLoading(false);
           // await params.goToPath('showImage');
         }, 2000);
@@ -90,7 +83,7 @@ export const Chat = () => {
     },
     showImage: {
       message: (params) => {
-        console.log("showImage", { params, isLoading });
+        // console.log("showImage", { params, isLoading });
         if (isLoading) {
           return "Your input is being processed , Pls. wait ...";
         } else {
@@ -123,24 +116,29 @@ export const Chat = () => {
                 );
                 const newBase64Img = await processSamImage(
                   processedImg,
-                  [clicks,event].map((e) => [
-                    e.nativeEvent?.offsetX, e?.nativeEvent?.offsetY
+                  [...clicks, event].map((e) => [
+                    e.nativeEvent?.offsetX,
+                    e?.nativeEvent?.offsetY,
                   ])
                 );
-                setProcessedImg(newBase64Img);
-                setClicks((clickValues) => [...clickValues, event]);
-                console.log("Click listener", { event });
-                console.log("clicked params", params);
-                
-                setTimeout(async () => {
-                  setProcessedImg(
-                    mockImagesList[
-                      _.random(0, mockImagesList.length - 1, false)
-                    ]
-                  );
+                if (newBase64Img.result === "success") {
+                  setProcessedImg(newBase64Img.data);
+                  setClicks((clickValues) => [...clickValues, event]);
                   setisLoading(false);
-                  await params.goToPath("showImage");
-                }, 2000);
+                  // console.log("Click listener", { event });
+                  // console.log("clicked params", params);
+
+                  // setProcessedImg(
+                  //   newBase64Img
+                  // );
+                  setTimeout(async () => {
+                    await params.goToPath("showImage");
+                  }, 1);
+                } else {
+                  await params.injectMessage(
+                    `An error occured while processing your requests. ${newBase64Img.data}`
+                  );
+                }
               }}
             />
             {/* {clicks.map((click) => (
@@ -221,7 +219,7 @@ export const Chat = () => {
     },
   };
 
-  console.log("Changes", { flow, clicks, messages });
+  // console.log("Changes", { flow, clicks, messages });
   return (
     <div style={{ padding: "2rem" }}>
       <ChatBot

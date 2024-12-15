@@ -1,12 +1,12 @@
 // src/mocks/handlers.js
 import { http, HttpResponse } from "msw";
-import { sourceTajMahalImage2 } from "./images";
+import { sourceTajMahalImage3 } from "./images";
 import _ from "lodash";
 const DEBUG_DELAY_MS = 4000;
 const samprocessImage = (url: string) => {
   return http.post(url, async () => {
     await _.delay(() => console.log("Do-nothing"), DEBUG_DELAY_MS);
-    const sampleImage = sourceTajMahalImage2;
+    const sampleImage = sourceTajMahalImage3;
     // ...and respond to them using this JSON response.
     const imageBuffer = await fetch(sampleImage).then((res) =>
       res.arrayBuffer()
