@@ -7,27 +7,46 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from fastapi import FastAPI, Depends
 from fastapi.responses import StreamingResponse, Response
+from fastapi.middleware.cors import CORSMiddleware
 from anthropic import AsyncAnthropic
 from pydantic import BaseModel, ConfigDict
 from io import BytesIO
 import geocoder
+import uuid
 
 from swag.tools import (
     SearchInternet,
     ReadWebsite,
     SearchForNearbyPlacesOfType,
     Geocode,
+    ReverseGeocode,
     GetDistanceMatrix,
     OptimizeRoute,
+    reverse_geocode
 )
 from swag.assistant import Assistant
 from swag.sam import predict_mask
 from swag.everywhere_tour_guide import run_everywhere_tour_guide
 import logging
 
+
+logging.basicConfig(level=logging.INFO)
+
+import logging
+
+
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
+
+origins = ["*"]
+app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+)
 
 class SamRequest(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -46,6 +65,9 @@ class UserPreference(BaseModel):
     preference: str
 
 class Query(BaseModel):
+    id: str
+    lat: float
+    lon: float
     query_type: str  # 'restaurant' or 'place' or 'trip'
     query: str
     stream: bool = True
@@ -53,6 +75,7 @@ class Query(BaseModel):
 
 # In-memory storage for preferences (might be replaced with a database later)
 user_preferences: List[str] = []
+conversations = {}
 
 
 @app.get("/location")
@@ -76,10 +99,10 @@ async def query_everywhere_tourguide(
         request: TourGuideRequest, location: dict[str, str] = Depends(get_location)
 ):
     if not request.location:
-        request.location = f"{location['city']}, {location['country']}"
+        request.location = reverse_geocode(ReverseGeocode(lat=request.lat, lng=request.lon))
 
-    if not request.lat or not request.lon:
-        request.lat, request.lon = float(location["latlng"][0]), float(location["latlng"][1])
+    request.base_image = request.base_image.replace("data:image/jpeg;base64,", "")
+    request.masked_image = request.masked_image.replace("data:image/jpeg;base64,", "")
 
     if request.stream:   
         return StreamingResponse(
@@ -101,14 +124,18 @@ async def query_everywhere_tourguide(
 async def query_assistant(
     query: Query, preferences: dict[str, list[str]] = Depends(get_preferences)
 ):
+
+    previous_conversation = conversations.get(query.id, [])
+
     assistant = Assistant(
         client=AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY")),
         model="claude-3-5-haiku-latest",
     )
+
+    assistant.messages = previous_conversation
     user_preferences = preferences["preferences"]
-    g = geocoder.ip("me")
     preferences_str = ", ".join(user_preferences)
-    location_str = f"{g.city}, {g.country}"
+    location_str = reverse_geocode(ReverseGeocode(lat=query.lat, lng=query.lon))
 
     async def generate_response():
         if query.query_type == "trip":
@@ -154,9 +181,10 @@ async def query_assistant(
         else:
             yield f"Invalid query type: {query.query_type}. Supported types are 'restaurant', 'place', and 'trip'."
             return
-
+        
         # Use async for to iterate over the assistant's response
         async for response_chunk in assistant(query.query):
+            conversations[query.id] = assistant.messages
             yield response_chunk
     
     if query.stream:
@@ -166,9 +194,10 @@ async def query_assistant(
 
 @app.post("/sam")
 async def sam(request: SamRequest):
+    request.image = request.image.replace("data:image/jpeg;base64,", "")
     image = predict_mask(request.image, request.clicks)
     img_byte_arr = BytesIO()
-    image.save(img_byte_arr, format='JPEG')
+    image.save(img_byte_arr, format='PNG')
     img_byte_arr = img_byte_arr.getvalue()
     return Response(
         content=img_byte_arr,

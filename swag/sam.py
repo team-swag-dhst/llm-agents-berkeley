@@ -62,14 +62,6 @@ def predict_mask(og_image: str, clicks: list[list[int]]) -> Image.Image:
             draw.ellipse([x-radius, y-radius, x+radius, y+radius],
                         fill=color)
             draw.ellipse([x-radius, y-radius, x+radius, y+radius],
-                        outline='white', width=2)
+                        outline='white', width=1)
 
     return result
-
-# image_path = Path(__file__).parent.parent / "imgs" / "dali.png"
-# with open(image_path, "rb") as f:
-#     image = f.read()
-#     image = base64.b64encode(image).decode('utf-8')
-# 
-# clicks = [[100, 100], [200, 200]]
-# predict_mask(image, clicks)

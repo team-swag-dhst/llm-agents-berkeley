@@ -26,8 +26,6 @@ def tourguide():
         "lon": lon
     }
 
-
-
     response = requests.post(url, json=request_body, stream=True)
     for line in response.iter_lines():
         print(line.decode("utf-8"))
