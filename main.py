@@ -56,7 +56,7 @@ class SamRequest(BaseModel):
 class TourGuideRequest(BaseModel):
     base_image: str
     masked_image: str
-    location: str
+    location: str = ""
     lat: float
     lon: float
     stream: bool = True
