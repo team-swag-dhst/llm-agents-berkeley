@@ -11,7 +11,7 @@ function _arrayBufferToBase64(buffer: any) {
   }
   return window.btoa(binary);
 }
-const tourguide = async (base64Image: string, maskedImage:string,location:string,lat:any,lng:any) => {
+const tourguide = async (base64Image: string, maskedImage:string,location:string='Kanyakumari',lat:any=8.0777,lng:any=77.5539) => {
   try {
     const response = await axios.post(
       tourguideurl,
