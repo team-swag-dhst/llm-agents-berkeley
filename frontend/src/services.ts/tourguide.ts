@@ -11,11 +11,11 @@ function _arrayBufferToBase64(buffer: any) {
   }
   return window.btoa(binary);
 }
-const tourguide = async (base64Image: string, maskedImage:string,location:string='Kanyakumari',lat:any=8.0777,lng:any=77.5539) => {
+const tourguide = async (base64Image: string, maskedImage:string,lat:any=8.0777,lng:any=77.5539) => {
   try {
     const response = await axios.post(
       tourguideurl,
-      { base_image: base64Image, masked_image:maskedImage,location,lat,lon:lng,stream:false },
+      { base_image: base64Image, masked_image:maskedImage,lat,lon:lng,stream:false },
     //   { responseType: "arraybuffer" }
     );
     // let base64result: any = "";

@@ -9,15 +9,24 @@ import {
 import * as _ from "lodash";
 import { processSamImage } from "../services.ts/sam-process";
 import { tourguide } from "../services.ts/tourguide";
+import { GpsLocation } from "../components/GPSLocation";
+
 export const Chat = () => {
   const [name, setName] = useState("");
   const [base64IMG, setBase64IMG] = useState("");
   const [recentResponse, setRecentResponse] = useState("");
 
+  const [geoData, setGeoData] = useState({
+    loading: false,
+    error: false,
+    latitude: 0,
+    longitude: 0,
+  });
   const [clicks, setClicks] = useState([]);
   const mockImagesList = [sourceTajMahalImage2];
   const [processedImg, setProcessedImg] = useState("");
 
+  const [fetchingLocation, setFetchingLocation] = useState(false);
   const [isLoading, setisLoading] = useState(false);
   const { messages, removeMessage, injectMessage, replaceMessages } =
     useMessages();
@@ -41,6 +50,19 @@ export const Chat = () => {
     convertToBase64(files[0]);
     // handle files logic here
   };
+  // const getCurrentLocation = (geoData)=>{
+  //   if (geoData.loading) {
+  //     console.log('still Loading ...')
+  //   }
+
+  //   if (geoData.error) {
+  //     console.log('Error occured')
+  //   }
+  //   if(!geoData?.loading){
+  //     console.log("latitude",geoData.latitude);
+  //     console.log("longitude",geoData.longitude);
+  //   }
+  // }
   const flow = {
     start: {
       message: "Hello there! What is your name?",
@@ -51,20 +73,22 @@ export const Chat = () => {
       message: "This feature is under development. Pls. check later?",
       function: (params) => setName(params.userInput),
       path: "conversationType",
-      chatDisabled:true, options:['Start Again']
-
+      chatDisabled: true,
+      options: ["Start Again"],
     },
-    trip:{
+    trip: {
       message: "This feature is under development. Pls. check later?",
       function: (params) => setName(params.userInput),
       path: "conversationType",
-      chatDisabled:true, options:['Start Again']
+      chatDisabled: true,
+      options: ["Start Again"],
     },
-    place:{
+    place: {
       message: "This feature is under development. Pls. check later?",
       function: (params) => setName(params.userInput),
       path: "conversationType",
-      chatDisabled:true, options:['Start Again']
+      chatDisabled: true,
+      options: ["Start Again"],
     },
     conversationType: {
       message: (params) => {
@@ -95,15 +119,18 @@ export const Chat = () => {
       path: (params) => {
         return params.userInput === "Cancel"
           ? "conversationType"
-          : "processing";
+          : "shareLocation";
       },
+      // function: ()=>{
+      //   getCurrentLocation();
+      // },
       options: ["Cancel"],
     },
     reupload_image: {
       message: (params) => `Hi again ${name}, please upload the photo.`,
       chatDisabled: true,
       file: (params) => handleUpload(params),
-      path: "end",
+      path: "shareLocation",
     },
     end: {
       transition: () => {
@@ -121,8 +148,14 @@ export const Chat = () => {
         await params.injectMessage(
           "Your photo is being processed , Pls. wait ..."
         );
-        const response = await tourguide(base64IMG, base64IMG);
-
+        // getCurrentLocation();
+        const response = await tourguide(
+          base64IMG,
+          processedImg,
+          geoData.latitude,
+          geoData.longitude
+        );
+        setFetchingLocation(false);
         console.log("tourguide response", response);
         setRecentResponse(response);
         // if (response.result === "success") {
@@ -136,25 +169,145 @@ export const Chat = () => {
         //   // );
         // }
         setisLoading(false);
+
         console.log("Done");
         params.goToPath("showImage");
         // return 'Your request is processed, choose showImage option to view the image.'
       },
       // options: ["showImage"],
       chatDisabled: true,
-      function: async () => {
-        const response = await tourguide(base64IMG, base64IMG, "Earth", 0, 0);
-        setisLoading(false);
-        // setTimeout(async () => {
-        //   // setProcessedImg(
-        //   //   mockImagesList[_.random(0, mockImagesList.length - 1, false)]
-        //   // );
-        //   // await params.goToPath('showImage');
-        // }, 2000);
-      },
+      // function: async () => {
+      //   const response = await tourguide(base64IMG, base64IMG, "Earth", 0, 0);
+      //   setisLoading(false);
+      //   // setTimeout(async () => {
+      //   //   // setProcessedImg(
+      //   //   //   mockImagesList[_.random(0, mockImagesList.length - 1, false)]
+      //   //   // );
+      //   //   // await params.goToPath('showImage');
+      //   // }, 2000);
+      // },
       path: (params) => {
         return "showImage";
       },
+    },
+    shareLocation: {
+      message: async (params) => {
+        setFetchingLocation(true);
+        return `Pls. share your current location. If prompted for permissions, Pls. allow your current location to be shared. `;
+      },
+      chatDisabled: true,
+      path: async (params) => {
+        if (params.userInput === "Cancel") {
+          return "conversationType";
+        } else {
+          setFetchingLocation(true);
+          return "previewImage";
+        }
+      },
+      options: ["Share location", "Cancel"],
+    },
+    previewImage: {
+      message: async (params) => {
+        // console.log("showImage", { params, isLoading });
+        await params.injectMessage("Your location and photo are received ...");
+        await params.injectMessage(
+          "You can click anywhere in the image to get specific details or"
+        );
+        await params.injectMessage(
+          "You can choose get general details option "
+        );
+        setProcessedImg(base64IMG);
+      },
+      component: (params) => {
+        return (
+          <div
+            style={{
+              padding: "0.25rem",
+              border: "solid 2px black",
+              marginTop: 10,
+              marginLeft: 20,
+              maxHeight: "40vh",
+              maxWidth: "70vw",
+              display: "flex",
+              justifyContent: "center",
+              height: "auto",
+            }}
+          >
+            {/* TODO remove clicked positions image */}
+            <img
+              src={`${base64IMG}`}
+              style={{ maxHeight: "100%", maxWidth: "100%" }}
+              onClick={async (event) => {
+                await params.injectMessage(
+                  `Your request is accepted pls. wait, clicked positions [${
+                    event?.nativeEvent?.offsetX || ""
+                  },${event?.nativeEvent?.offsetY || ""}] `
+                );
+                const newBase64Img = await processSamImage(
+                  base64IMG,
+                  [...clicks, event].map((e) => [
+                    e.nativeEvent?.offsetX,
+                    e?.nativeEvent?.offsetY,
+                  ])
+                );
+                if (newBase64Img.result === "success") {
+                  setProcessedImg(newBase64Img.data);
+                  setClicks((clickValues) => [...clickValues, event]);
+                  setisLoading(false);
+                  // console.log("Click listener", { event });
+                  // console.log("clicked params", params);
+
+                  // setProcessedImg(
+                  //   newBase64Img
+                  // );
+                  setTimeout(async () => {
+                    await params.goToPath("processing");
+                  }, 1);
+                } else {
+                  await params.injectMessage(
+                    `An error occured while processing your requests. ${newBase64Img.data}`
+                  );
+                }
+              }}
+            />
+            {/* {clicks.map((click) => (
+            <div
+              style={{
+                borderRadius: "50%",
+                width: "2rem",
+                color: "red",
+                fill: "red",
+                offsetLeft: click.target.offsetLeft,
+                offsetTop: click.target.offsetTop,
+              }}
+            >
+              &nbsp;
+            </div>
+          ))} */}
+          </div>
+        );
+      },
+      options: ["Show General Details", "Restart", "New Image", "End"],
+      path: (params) => {
+        if (params.userInput === "Restart") {
+          return "conversationType";
+        } else if (params.userInput === "New Image") {
+          return "upload_image";
+        } else if (params.userInput === "End") {
+          return "end";
+        } else if (params.userInput === " Show General Details") {
+          return "processing";
+        }
+        // Add options to continue conversation
+      },
+      // thank: {
+      //   message: async (params: any) => {
+      //     await params.injectMessage("I am an injected message!");
+
+      //     return "I am a return message!";
+      //   },
+      //   path: "start",
+      // },
     },
     showImage: {
       message: async (params) => {
@@ -199,7 +352,8 @@ export const Chat = () => {
                   },${event?.nativeEvent?.offsetY || ""}] `
                 );
                 const newBase64Img = await processSamImage(
-                  processedImg,
+                  // processedImg,
+                  base64IMG,
                   [...clicks, event].map((e) => [
                     e.nativeEvent?.offsetX,
                     e?.nativeEvent?.offsetY,
@@ -309,6 +463,7 @@ export const Chat = () => {
         styles={styles}
         flow={flow}
       />
+      {fetchingLocation && <GpsLocation setGeoData={setGeoData} />}
     </div>
   );
 };
