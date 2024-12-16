@@ -1,5 +1,6 @@
 import axios from "axios";
-const baseUrl = "";
+import { BASE_URL } from "../config";
+const baseUrl = BASE_URL;
 const sam_url = `${baseUrl}/sam`;
 function _arrayBufferToBase64(buffer: any) {
   var binary = "";
@@ -33,7 +34,7 @@ const processSamImage = async (base64Image: string, clicks: Array<any>) => {
     // };
   } catch (e) {
     console.log("Error", e);
-    return Promise.resolve({ result: "failure", data: e });
+    return Promise.resolve({ result: "fail", data: e });
   }
 };
 export { processSamImage };

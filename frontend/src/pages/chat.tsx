@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useState } from "react";
-import ChatBot, { Button, useMessages } from "react-chatbotify";
+import ChatBot, { Button, useFlow, useMessages } from "react-chatbotify";
 import {
   sourceTajMahalImage,
   sourceTajMahalImage2,
@@ -8,16 +8,20 @@ import {
 } from "../mock/images";
 import * as _ from "lodash";
 import { processSamImage } from "../services.ts/sam-process";
+import { tourguide } from "../services.ts/tourguide";
 export const Chat = () => {
   const [name, setName] = useState("");
   const [base64IMG, setBase64IMG] = useState("");
+  const [recentResponse, setRecentResponse] = useState("");
+
   const [clicks, setClicks] = useState([]);
   const mockImagesList = [sourceTajMahalImage2];
-  const [processedImg, setProcessedImg] = useState(sourceTajMahalImage);
+  const [processedImg, setProcessedImg] = useState("");
 
   const [isLoading, setisLoading] = useState(false);
   const { messages, removeMessage, injectMessage, replaceMessages } =
     useMessages();
+  const { restartFlow } = useFlow();
   const replaceMessageAfterClick = () => {};
   const convertToBase64 = (selectedFile) => {
     const reader = new FileReader();
@@ -28,6 +32,7 @@ export const Chat = () => {
       // console.log("called: ", reader);
       // console.log("base64 img result", reader.result);
       setBase64IMG(reader.result);
+      setProcessedImg(reader.result);
     };
   };
   const handleUpload = (params: any) => {
@@ -40,14 +45,59 @@ export const Chat = () => {
     start: {
       message: "Hello there! What is your name?",
       function: (params) => setName(params.userInput),
-      path: "upload_image",
+      path: "conversationType",
+    },
+    restaurant: {
+      message: "This feature is under development. Pls. check later?",
+      function: (params) => setName(params.userInput),
+      path: "conversationType",
+      chatDisabled:true, options:['Start Again']
+
+    },
+    trip:{
+      message: "This feature is under development. Pls. check later?",
+      function: (params) => setName(params.userInput),
+      path: "conversationType",
+      chatDisabled:true, options:['Start Again']
+    },
+    place:{
+      message: "This feature is under development. Pls. check later?",
+      function: (params) => setName(params.userInput),
+      path: "conversationType",
+      chatDisabled:true, options:['Start Again']
+    },
+    conversationType: {
+      message: (params) => {
+        return (
+          (params.prevPath === "start" ? `Nice to meet you ${name}. ` : "") +
+          `Choose what you want to do?`
+        );
+      },
+      chatDisabled: true,
+      options: ["Restaurant", "Trip", "Place", "Tour Guide"],
+      path: (params) => {
+        if (params.userInput === "Restaurant") {
+          return "restaurant";
+        } else if (params.userInput === "Trip") {
+          return "trip";
+        } else if (params.userInput === "Place") {
+          return "place";
+        } else if (params.userInput === "Tour Guide") {
+          return "upload_image";
+        }
+      },
     },
     upload_image: {
       message: (params) =>
-        `Nice to meet you ${params.userInput}, please upload the photo.`,
+        `Please upload a photo of the place you want to share with the tour guide.`,
       chatDisabled: true,
       file: (params) => handleUpload(params),
-      path: "processing",
+      path: (params) => {
+        return params.userInput === "Cancel"
+          ? "conversationType"
+          : "processing";
+      },
+      options: ["Cancel"],
     },
     reupload_image: {
       message: (params) => `Hi again ${name}, please upload the photo.`,
@@ -60,34 +110,67 @@ export const Chat = () => {
         return;
       },
       message: (params) => {
-        return `Thank you`;
+        return `Thank you. Lets talk again later. Bye for now.`;
       },
-      options: ["start"],
+      options: ["Start Again"],
       path: "start",
       chatDisabled: true,
     },
     processing: {
-      message: "Your photo is being processed , Pls. wait ...",
-      options: ["showImage"],
+      message: async (params) => {
+        await params.injectMessage(
+          "Your photo is being processed , Pls. wait ..."
+        );
+        const response = await tourguide(base64IMG, base64IMG, "Earth", 0, 0);
+
+        console.log("tourguide response", response);
+        setRecentResponse(response);
+        // if (response.result === "success") {
+        //   // await params.injectMessage(response.data);
+        // } else if (response.result === "fail") {
+        //   setRecentResponse(
+        //     `An error occured while processing your request.${response.data} `
+        //   );
+        //   // await params.injectMessage(
+        //   // `An error occured while processing your request.${response.data} `
+        //   // );
+        // }
+        setisLoading(false);
+        console.log("Done");
+        params.goToPath("showImage");
+        // return 'Your request is processed, choose showImage option to view the image.'
+      },
+      // options: ["showImage"],
       chatDisabled: true,
+      function: async () => {
+        const response = await tourguide(base64IMG, base64IMG, "Earth", 0, 0);
+        setisLoading(false);
+        // setTimeout(async () => {
+        //   // setProcessedImg(
+        //   //   mockImagesList[_.random(0, mockImagesList.length - 1, false)]
+        //   // );
+        //   // await params.goToPath('showImage');
+        // }, 2000);
+      },
       path: (params) => {
-        setTimeout(async () => {
-          // setProcessedImg(
-          //   mockImagesList[_.random(0, mockImagesList.length - 1, false)]
-          // );
-          setisLoading(false);
-          // await params.goToPath('showImage');
-        }, 2000);
         return "showImage";
       },
     },
     showImage: {
-      message: (params) => {
+      message: async (params) => {
         // console.log("showImage", { params, isLoading });
         if (isLoading) {
           return "Your input is being processed , Pls. wait ...";
         } else {
-          return "Request Processed. Based on your request, the following are the suggestions from the Model";
+          if (recentResponse.result === "success") {
+            await params.injectMessage(new String(recentResponse.data).trim());
+            return "You can click the desired area in the image, to know more details.";
+          } else if (recentResponse.result === "fail") {
+            await params.injectMessage(
+              "Sorry. An error occured while processing your request."
+            );
+            return new String(recentResponse.data);
+          }
         }
       },
       component: (params) =>
@@ -105,6 +188,7 @@ export const Chat = () => {
               height: "auto",
             }}
           >
+            {/* TODO remove clicked positions image */}
             <img
               src={`${processedImg}`}
               style={{ maxHeight: "100%", maxWidth: "100%" }}
@@ -132,7 +216,7 @@ export const Chat = () => {
                   //   newBase64Img
                   // );
                   setTimeout(async () => {
-                    await params.goToPath("showImage");
+                    await params.goToPath("processing");
                   }, 1);
                 } else {
                   await params.injectMessage(
@@ -157,29 +241,26 @@ export const Chat = () => {
           ))} */}
           </div>
         ) : undefined,
-      options: [
-        // "reupload_image",
-        "showImage",
-        "end",
-      ],
+      options: ["Restart", "New Image", "End"],
       path: (params) => {
-        // if(params.userInput==='showImage'){
-
-        return isLoading ? "showImage" : "end";
-        // }
-        // else {
-        //   return params.userInput
-        // }
+        if (params.userInput === "Restart") {
+          return "conversationType";
+        } else if (params.userInput === "New Image") {
+          return "upload_image";
+        } else if (params.userInput === "End") {
+          return "end";
+        }
+        // Add options to continue conversation
       },
-    },
-    // thank: {
-    //   message: async (params: any) => {
-    //     await params.injectMessage("I am an injected message!");
+      // thank: {
+      //   message: async (params: any) => {
+      //     await params.injectMessage("I am an injected message!");
 
-    //     return "I am a return message!";
-    //   },
-    //   path: "start",
-    // },
+      //     return "I am a return message!";
+      //   },
+      //   path: "start",
+      // },
+    },
   };
   const styles = {
     headerStyle: {
@@ -196,7 +277,7 @@ export const Chat = () => {
   // const themes = [{ id: "omen", version: "0.1.0" }];
   const settings = {
     general: { embedded: true },
-    chatHistory: { storageKey: "example_simulation_stream" },
+    chatHistory: { storageKey: "example_team_swag_chat" },
     botBubble: { simStream: true },
     header: {
       title: (
