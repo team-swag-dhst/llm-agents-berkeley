@@ -239,9 +239,10 @@ export const Chat = () => {
               style={{ maxHeight: "100%", maxWidth: "100%" }}
               onClick={async (event) => {
                 await params.injectMessage(
-                  `Your request is accepted pls. wait, clicked positions [${
-                    event?.nativeEvent?.offsetX || ""
-                  },${event?.nativeEvent?.offsetY || ""}] `
+                  `Your request is accepted pls. wait ... `
+                  // clicked positions [${
+                  //   event?.nativeEvent?.offsetX || ""
+                  // },${event?.nativeEvent?.offsetY || ""}] `
                 );
                 const newBase64Img = await processSamImage(
                   base64IMG,
