@@ -121,7 +121,7 @@ export const Chat = () => {
         await params.injectMessage(
           "Your photo is being processed , Pls. wait ..."
         );
-        const response = await tourguide(base64IMG, base64IMG, "Earth", 0, 0);
+        const response = await tourguide(base64IMG, base64IMG);
 
         console.log("tourguide response", response);
         setRecentResponse(response);

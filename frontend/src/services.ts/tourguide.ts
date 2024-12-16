@@ -15,7 +15,7 @@ const tourguide = async (base64Image: string, maskedImage:string,location:string
   try {
     const response = await axios.post(
       tourguideurl,
-      { base_image: base64Image, masked_image:maskedImage,location,lat,lng,stream:false },
+      { base_image: base64Image, masked_image:maskedImage,location,lat,lon:lng,stream:false },
     //   { responseType: "arraybuffer" }
     );
     // let base64result: any = "";
