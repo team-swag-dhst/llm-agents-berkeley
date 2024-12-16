@@ -156,7 +156,7 @@ export const Chat = () => {
           geoData.longitude
         );
         setFetchingLocation(false);
-        console.log("tourguide response", response);
+        // console.log("tourguide response", response);
         setRecentResponse(response);
         // if (response.result === "success") {
         //   // await params.injectMessage(response.data);
@@ -170,7 +170,7 @@ export const Chat = () => {
         // }
         setisLoading(false);
 
-        console.log("Done");
+        // console.log("Done");
         params.goToPath("showImage");
         // return 'Your request is processed, choose showImage option to view the image.'
       },
@@ -432,7 +432,7 @@ export const Chat = () => {
   const settings = {
     general: { embedded: true },
     chatHistory: { storageKey: "example_team_swag_chat" },
-    botBubble: { simStream: true },
+    botBubble: { simStream: true, streamSpeed: 15 },
     header: {
       title: (
         <div
