@@ -433,6 +433,10 @@ export const Chat = () => {
     general: { embedded: true },
     chatHistory: { storageKey: "example_team_swag_chat" },
     botBubble: { simStream: true, streamSpeed: 15 },
+    fileAttachment: {
+      multiple: false,
+      accept: ".jpg,.jpeg",
+    },
     header: {
       title: (
         <div
