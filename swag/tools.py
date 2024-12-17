@@ -13,6 +13,8 @@ import googlemaps
 from dotenv import load_dotenv
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 gmaps = googlemaps.Client(key=os.environ["GOOGLE_API_KEY"])
 
 class SearchInternet(BaseModel):
@@ -210,7 +212,7 @@ def search_internet(
         _ = item.pop('content', None)
         return_value.append(item)
     
-    logging.info("Received response from: `search_internet`")
+    logger.info("Received response from: `search_internet`")
     return json.dumps(return_value)
 
 
@@ -220,7 +222,7 @@ def read_website(request: ReadWebsite) -> str:
     url = f"https://r.jina.ai/{request.url}"
     headers = {"Authorization": f"Bearer {os.environ['JINAI_API_KEY']}"}
     response = requests.get(url, headers=headers, verify=True)
-    logging.info("Received response from: `read_website`")
+    logger.info("Received response from: `read_website`")
     return response.text
 
 
@@ -233,7 +235,7 @@ def get_details_of_place(request: GetDetailsOfPlace) -> str:
         "X-Goog-FieldMask": "displayName,rating,formattedAddress,priceRange,websiteUri",
     }
     response = requests.get(url, headers=headers)
-    logging.info(f"`get_details_of_place`: {response.text}")
+    logger.info(f"`get_details_of_place`: {response.text}")
     return json.dumps(response.json())
 
 
@@ -249,7 +251,7 @@ def search_google_maps_with_text(request: SearchGoogleMapsWithText) -> str:
         "textQuery": request.query,
     }
     response = requests.post(url, headers=headers, json=payload)
-    logging.info(f"`search_google_maps_with_text`: {response.text}")
+    logger.info(f"`search_google_maps_with_text`: {response.text}")
     return json.dumps(response.json())
 
 
@@ -274,7 +276,7 @@ def search_for_nearby_places_of_type(
         },
     }
     response = requests.post(url, headers=headers, json=payload)
-    logging.info(f"`search_for_nearby_places_of_type`: {response.text}")
+    logger.info(f"`search_for_nearby_places_of_type`: {response.text}")
     return json.dumps(response.json())
 
 
@@ -284,7 +286,7 @@ def get_directions(request: GetDirections) -> str:
         request.origin, request.destination, mode=request.mode
     )
     legs = directions[0]["legs"]
-    logging.info(f"`get_directions`: {legs}")
+    logger.info(f"`get_directions`: {legs}")
     return json.dumps(legs)
 
 
@@ -294,24 +296,24 @@ def get_distance_matrix(request: GetDistanceMatrix) -> str:
         matrix = gmaps.distance_matrix(
             request.origins, request.destinations, mode=request.mode.value
         )
-        logging.info(f"`get_distance_matrix`: {matrix}")
+        logger.info(f"`get_distance_matrix`: {matrix}")
         return json.dumps(matrix)
     except Exception as e:
-        logging.error(f"Unexpected error in get_distance_matrix: {str(e)}")
+        logger.error(f"Unexpected error in get_distance_matrix: {str(e)}")
         raise ValueError(f"Unexpected error: {str(e)}")
 
 
 @ToolRegistry.register(GetElevation)
 def get_elevation(request: GetElevation) -> str:
     elevation = gmaps.elevation(request.locations)
-    logging.info(f"`get_elevation`: {elevation}")
+    logger.info(f"`get_elevation`: {elevation}")
     return json.dumps(elevation)
 
 
 @ToolRegistry.register(Geocode)
 def geocode(request: Geocode) -> str:
     geocode_result = gmaps.geocode(request.address)
-    logging.info(f"`geocode`: {geocode_result}")
+    logger.info(f"`geocode`: {geocode_result}")
     coordinates = geocode_result[0]["geometry"]["location"]
     return json.dumps(coordinates)
 
@@ -319,21 +321,21 @@ def geocode(request: Geocode) -> str:
 @ToolRegistry.register(ReverseGeocode)
 def reverse_geocode(request: ReverseGeocode) -> str:
     reverse_geocode_result = gmaps.reverse_geocode((request.lat, request.lng))
-    logging.info(f"`reverse_geocode`: {reverse_geocode_result}")
+    logger.info(f"`reverse_geocode`: {reverse_geocode_result}")
     return json.dumps(reverse_geocode_result)
 
 
 @ToolRegistry.register(GetTimeZone)
 def get_time_zone(request: GetTimeZone) -> str:
     timezone = gmaps.timezone(request.location, request.timestamp)
-    logging.info(f"`get_time_zone`: {timezone}")
+    logger.info(f"`get_time_zone`: {timezone}")
     return json.dumps(timezone)
 
 
 @ToolRegistry.register(GetNearestRoads)
 def get_nearest_roads(request: GetNearestRoads) -> str:
     roads = gmaps.nearest_roads(request.points)
-    logging.info(f"`get_nearest_roads`: {roads}")
+    logger.info(f"`get_nearest_roads`: {roads}")
     return json.dumps(roads)
 
 
@@ -344,7 +346,7 @@ def get_static_map(request: GetStaticMap) -> str:
         zoom=request.zoom,
         size=(request.size[0], request.size[1]),
     )
-    logging.info("`get_static_map`: Static map URL generated")
+    logger.info("`get_static_map`: Static map URL generated")
     return static_map_url
 
 
@@ -352,7 +354,7 @@ def get_static_map(request: GetStaticMap) -> str:
 def validate_address(request: ValidateAddress) -> str:
     # Note: The googlemaps Python client doesn't support address validation yet
     # We'll use a placeholder implementation
-    logging.warning(
+    logger.warning(
         "Address validation is not supported by the googlemaps Python client. Returning input address."
     )
     return json.dumps({"input_address": request.address, "validated": False})
@@ -380,7 +382,7 @@ def optimize_route(request: OptimizeRoute) -> str:
 
     result = {"optimized_route": route, "total_distance": total_distance}
 
-    logging.info(f"`optimize_route`: {result}")
+    logger.info(f"`optimize_route`: {result}")
     return json.dumps(result)
 
 

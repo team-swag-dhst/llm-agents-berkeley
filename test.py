@@ -4,11 +4,11 @@ import json
 
 def tourguide():
 
-    base_img_path = "imgs/trevi.jpg"
-    masked_img_path = "imgs/masked_tf.jpg"
-    location = "Centro Storico, Rome, Italy"
-    lat = 41.90084878412515
-    lon = 12.483514146947476
+    base_img_path = "imgs/dali.jpg"
+    masked_img_path = "imgs/masked_dali.jpg"
+    location = "Vatican Museum"
+    lat = 41.906314680189425
+    lon = 12.454854851168495
 
     with open(base_img_path, "rb") as img_file:
         base_img = base64.b64encode(img_file.read()).decode("utf-8")
@@ -45,8 +45,6 @@ def sam():
         "clicks": clicks
     }
 
-    with open("request.json", "w") as f:
-        f.write(json.dumps(request_body))
     # response = requests.post(url, json=request_body)
     # with open("response_output.png", "wb") as f:
         # f.write(response.content)

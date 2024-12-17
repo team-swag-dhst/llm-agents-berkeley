@@ -7,6 +7,8 @@ from swag.tools import ToolRegistry
 import json
 import logging
 
+logger = logging.getLogger(__name__)
+
 
 def convert_pydantic_to_anthropic_schema(model) -> Dict[str, Any]:
     json_schema = model.model_json_schema()
@@ -85,6 +87,7 @@ class Assistant:
 
             for content in response.content:
                 if isinstance(content, TextBlock):
+                    logger.info(f"Assistant: {content.text}")
                     yield f"\n{content.text}"
                 elif isinstance(content, ToolUseBlock):
                     yield f"\nMaking a call to tool function {content.name} with input {content.input}."
@@ -105,7 +108,8 @@ class Assistant:
                         is_error = True
                         tool_result = str(e)
                         yield "\nAn error occurred when trying to interact with the tool."
-
+                    
+                    logger.info("Tool result: %s", tool_result[:100])
                     new_input = [{
                         "type": "tool_result",
                         "tool_use_id": content.id,

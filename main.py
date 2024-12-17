@@ -31,11 +31,7 @@ import logging
 
 
 logging.basicConfig(level=logging.INFO)
-
-import logging
-
-
-logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -55,7 +51,7 @@ class SamRequest(BaseModel):
 
 class TourGuideRequest(BaseModel):
     base_image: str
-    masked_image: str
+    masked_image: str = ""
     location: str = ""
     lat: float
     lon: float
@@ -107,16 +103,21 @@ async def query_everywhere_tourguide(
     if request.stream:   
         return StreamingResponse(
                 run_everywhere_tour_guide(
-                    request.base_image,
-                    request.masked_image,
-                    request.location,
-                    request.lat,
-                    request.lon
+                    base_image=request.base_image,
+                    masked_image=request.masked_image,
+                    location=request.location,
+                    lat=request.lat,
+                    lon=request.lon
                 ),
                 media_type="text/plain"
         )
 
-    response = "".join([chunk async for chunk in run_everywhere_tour_guide(request.base_image, request.masked_image, request.location, request.lat, request.lon)])
+    response = "".join([chunk async for chunk in run_everywhere_tour_guide(
+        base_image=request.base_image,
+        masked_image=request.masked_image,
+        location=request.location,
+        lat=request.lat,
+        lon=request.lon)])
     return response
 
 
@@ -197,7 +198,7 @@ async def sam(request: SamRequest):
     request.image = request.image.replace("data:image/jpeg;base64,", "")
     image = predict_mask(request.image, request.clicks)
     img_byte_arr = BytesIO()
-    image.save(img_byte_arr, format='PNG')
+    image.save(img_byte_arr, format='JPEG')
     img_byte_arr = img_byte_arr.getvalue()
     return Response(
         content=img_byte_arr,
