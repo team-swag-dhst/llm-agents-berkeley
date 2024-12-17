@@ -43,7 +43,7 @@ def predict_mask(og_image: str, clicks: list[list[int]]) -> Image.Image:
     mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     contours = [cv2.approxPolyDP(contour, epsilon=0.01, closed=True) for contour in contours]
-    mask_image = cv2.drawContours(mask_image, contours, -1, (1, 1, 1, 1.0), thickness=10)
+    mask_image = cv2.drawContours(mask_image, contours, -1, (1, 1, 1, 1.0), thickness=2)
 
     if pil_img.mode != 'RGBA':
         pil_img = pil_img.convert('RGBA')
@@ -55,7 +55,7 @@ def predict_mask(og_image: str, clicks: list[list[int]]) -> Image.Image:
     if point_coords is not None and point_labels is not None:
         draw = ImageDraw.Draw(result)
 
-        radius = 10
+        radius = 3
         for coord, label in zip(point_coords, point_labels):
             x, y = coord
             color = 'green' if label == 1 else 'red'
@@ -63,13 +63,6 @@ def predict_mask(og_image: str, clicks: list[list[int]]) -> Image.Image:
                         fill=color)
             draw.ellipse([x-radius, y-radius, x+radius, y+radius],
                         outline='white', width=2)
-
+    
+    result = result.convert("RGB")
     return result
-
-# image_path = Path(__file__).parent.parent / "imgs" / "dali.png"
-# with open(image_path, "rb") as f:
-#     image = f.read()
-#     image = base64.b64encode(image).decode('utf-8')
-# 
-# clicks = [[100, 100], [200, 200]]
-# predict_mask(image, clicks)
