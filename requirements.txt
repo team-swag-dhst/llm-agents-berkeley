@@ -1,5 +1,5 @@
 fastapi[standard]==0.115.5
-anthropic==0.39.0
+anthropic==0.42.0
 requests==2.32.3
 googlemaps==4.10.0
 geocoder==1.38.1
