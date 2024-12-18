@@ -12,7 +12,7 @@ from anthropic import AsyncAnthropic
 from pydantic import BaseModel, ConfigDict
 from io import BytesIO
 import geocoder
-import uuid
+import json
 
 from swag.tools import (
     SearchInternet,
@@ -22,7 +22,7 @@ from swag.tools import (
     ReverseGeocode,
     GetDistanceMatrix,
     OptimizeRoute,
-    reverse_geocode
+    reverse_geocode,
 )
 from swag.assistant import Assistant
 from swag.sam import predict_mask
@@ -37,17 +37,19 @@ app = FastAPI()
 
 origins = ["*"]
 app.add_middleware(
-        CORSMiddleware,
-        allow_origins=origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
+
 
 class SamRequest(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     image: str
     clicks: list[list[int]]
+
 
 class TourGuideRequest(BaseModel):
     base_image: str
@@ -57,8 +59,10 @@ class TourGuideRequest(BaseModel):
     lon: float
     stream: bool = True
 
+
 class UserPreference(BaseModel):
     preference: str
+
 
 class Query(BaseModel):
     id: str
@@ -90,34 +94,43 @@ async def add_preference(preference: UserPreference):
 async def get_preferences():
     return {"preferences": user_preferences}
 
+
 @app.post("/tourguide")
 async def query_everywhere_tourguide(
-        request: TourGuideRequest, location: dict[str, str] = Depends(get_location)
+    request: TourGuideRequest, location: dict[str, str] = Depends(get_location)
 ):
     if not request.location:
-        request.location = reverse_geocode(ReverseGeocode(lat=request.lat, lng=request.lon))
+        request.location = reverse_geocode(
+            ReverseGeocode(lat=request.lat, lng=request.lon)
+        )
 
     request.base_image = request.base_image.replace("data:image/jpeg;base64,", "")
     request.masked_image = request.masked_image.replace("data:image/jpeg;base64,", "")
 
-    if request.stream:   
+    if request.stream:
         return StreamingResponse(
-                run_everywhere_tour_guide(
-                    base_image=request.base_image,
-                    masked_image=request.masked_image,
-                    location=request.location,
-                    lat=request.lat,
-                    lon=request.lon
-                ),
-                media_type="text/plain"
+            run_everywhere_tour_guide(
+                base_image=request.base_image,
+                masked_image=request.masked_image,
+                location=request.location,
+                lat=request.lat,
+                lon=request.lon,
+            ),
+            media_type="text/plain",
         )
 
-    response = "".join([chunk async for chunk in run_everywhere_tour_guide(
-        base_image=request.base_image,
-        masked_image=request.masked_image,
-        location=request.location,
-        lat=request.lat,
-        lon=request.lon)])
+    response = "".join(
+        [
+            chunk
+            async for chunk in run_everywhere_tour_guide(
+                base_image=request.base_image,
+                masked_image=request.masked_image,
+                location=request.location,
+                lat=request.lat,
+                lon=request.lon,
+            )
+        ]
+    )
     return response
 
 
@@ -125,7 +138,6 @@ async def query_everywhere_tourguide(
 async def query_assistant(
     query: Query, preferences: dict[str, list[str]] = Depends(get_preferences)
 ):
-
     previous_conversation = conversations.get(query.id, [])
 
     assistant = Assistant(
@@ -141,20 +153,26 @@ async def query_assistant(
     async def generate_response():
         if query.query_type == "trip":
             system_trip = """
-            You are an AI trip planner.
-            The user wants to travel, given a set of places and waypoints.
+            You are an AI trip planner designed to create personalized travel itineraries. When a user provides their travel destinations and preferences, your task is to:
 
-            Your goal is to create a detailed trip plan including:
-            1. Route information (directions, distances, estimated travel times).
-            2. Suggested activities and attractions along the route and at the destination.
-            3. Potential accommodation options at the destination.
-            4. Any relevant warnings or advisories for the trip (e.g., road closures, weather).
+            1. Outline a high-level route between the given locations, including major waypoints.
+            2. Suggest 2-3 key activities or attractions for each location, tailored to the user's interests if provided.
+            3. Recommend a suitable accommodation type for the destination (e.g., hotel, hostel, vacation rental).
+            4. Highlight any crucial travel advisories or potential issues (weather, road conditions, local events).
 
-            Use tools to gather the necessary information. Provide the plan.
+            Prioritize brevity and relevance over exhaustive details. Use available tools to gather accurate, up-to-date information. Present the plan in a clear, concise format that's easy for the user to understand and act upon. Be prepared to adjust the plan based on user feedback or questions.
+
+            Note: if you need to geocode, use internet search of geolocation, not the geocode tool
             """
             assistant.system = system_trip
             assistant.define_tools(
-                [SearchInternet, ReadWebsite, Geocode, GetDistanceMatrix, OptimizeRoute]
+                [
+                    SearchInternet,
+                    ReadWebsite,
+                    GetDistanceMatrix,
+                    OptimizeRoute,
+                    Geocode,
+                ]
             )
         elif query.query_type in ["restaurant", "place"]:
             system_template = """
@@ -177,33 +195,43 @@ async def query_assistant(
                 location=location_str,
                 preferences_str=preferences_str,
                 additional_info=additional_info,
-                action=action)
-            assistant.define_tools([SearchInternet, ReadWebsite, SearchForNearbyPlacesOfType])
+                action=action,
+            )
+            assistant.define_tools(
+                [SearchInternet, ReadWebsite, SearchForNearbyPlacesOfType]
+            )
         else:
-            yield f"Invalid query type: {query.query_type}. Supported types are 'restaurant', 'place', and 'trip'."
+            yield json.dumps(
+                {
+                    "type": "error",
+                    "text": f"Invalid query type: {query.query_type}. Supported types are 'restaurant', 'place', and 'trip'.",
+                }
+            )
             return
-        
+
+        # Use async for to iterate over the assistant's response
+
         # Use async for to iterate over the assistant's response
         async for response_chunk in assistant(query.query):
             conversations[query.id] = assistant.messages
-            yield response_chunk
-    
+            print(">>> Response Chunk:", response_chunk)
+            yield json.dumps(response_chunk)
+
     if query.stream:
         return StreamingResponse(generate_response(), media_type="text/plain")
     else:
         return "".join([chunk async for chunk in generate_response()])
+
 
 @app.post("/sam")
 async def sam(request: SamRequest):
     request.image = request.image.replace("data:image/jpeg;base64,", "")
     image = predict_mask(request.image, request.clicks)
     img_byte_arr = BytesIO()
-    image.save(img_byte_arr, format='JPEG')
+    image.save(img_byte_arr, format="JPEG")
     img_byte_arr = img_byte_arr.getvalue()
-    return Response(
-        content=img_byte_arr,
-        media_type="image/jpeg"
-    )
+    return Response(content=img_byte_arr, media_type="image/jpeg")
+
 
 if __name__ == "__main__":
     import uvicorn

@@ -4,7 +4,7 @@ from anthropic import AsyncAnthropic
 from anthropic.types import TextBlock, ToolUseBlock
 import base64
 from swag.tools import ToolRegistry
-import json
+import uuid
 import logging
 
 logger = logging.getLogger(__name__)
@@ -54,10 +54,25 @@ class Assistant:
         self,
         prompt: str | None = None,
         images: List[str] | None = None,
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[Dict[str, Any], None]:
         if len(self.messages) >= 2 * self.max_steps:
-            yield f"\nMaximum number of steps {self.max_steps} reached. Please start a new conversation."
+            yield {
+                "type": "message",
+                "message": {
+                    "id": str(uuid.uuid4()),
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"\nMaximum number of steps {self.max_steps} reached. Please start a new conversation."
+                        }
+                    ],
+                    "model": self.model,
+                    "stop_reason": "max_steps_reached",
+                }
+            }
             return
+
         if prompt:
             message = {"role": "user", "content": [{"type": "text", "text": prompt}]}
             if images:
@@ -73,7 +88,7 @@ class Assistant:
                         }
                     )
             self.messages.append(message)
-        
+
         try:
             response = await self.client.messages.create(
                 model=self.model,
@@ -82,15 +97,38 @@ class Assistant:
                 system=self.system or "",
                 messages=self.messages,
             )
-            
+
             self.messages.append({"role": "assistant", "content": response.content})
 
+            yield {
+                "type": "message",
+                "message": response.model_dump()
+            }
+
+            # ... (previous code remains the same)
+
+            tool_results = []
             for content in response.content:
                 if isinstance(content, TextBlock):
                     logger.info(f"Assistant: {content.text}")
-                    yield f"\n{content.text}"
+                    yield {
+                        "type": "message_delta",
+                        "delta": {
+                            "type": "text_delta",
+                            "text": content.text,
+                        }
+                    }
                 elif isinstance(content, ToolUseBlock):
-                    yield f"\nMaking a call to tool function {content.name} with input {content.input}."
+                    yield {
+                        "type": "message_delta",
+                        "delta": {
+                            "type": "tool_use",
+                            "id": content.id,
+                            "name": content.name,
+                            "input": content.input,
+                        }
+                    }
+
                     tool_function, tool_model = ToolRegistry.get(content.name)
                     is_error = False
                     try:
@@ -100,32 +138,51 @@ class Assistant:
                                 tool_result = tool_function(model_instance)
                             else:
                                 tool_result = tool_function(**content.input)
-
-                            yield "\nTool function executed successfully."
                         else:
                             raise ValueError(f"Tool function {content.name} not found")
                     except Exception as e:
                         is_error = True
                         tool_result = str(e)
-                        yield "\nAn error occurred when trying to interact with the tool."
-                    
-                    logger.info("Tool result: %s", tool_result[:100])
-                    new_input = [{
+
+                    tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": content.id,
                         "content": tool_result,
                         "is_error": is_error,
-                    }]
-                    self.messages.append({"role": "user", "content": new_input})
+                    })
 
+                    yield {
+                        "type": "message_delta",
+                        "delta": {
+                            "type": "tool_result",
+                            "id": content.id,
+                            "output": tool_result,
+                            "is_error": is_error,
+                        }
+                    }
+
+                    logger.info("Tool result: %s", tool_result[:100])
+
+            # After processing all content, add all tool results to the messages
+            if tool_results:
+                self.messages.append({"role": "user", "content": tool_results})
 
             if response.stop_reason == "tool_use":
                 async for chunk in self():
                     yield chunk
 
         except Exception as e:
-            yield json.dumps({"type": "error", "text": f"An error occurred: {str(e)}"})
+            yield {
+                "type": "error",
+                "error": {
+                    "type": "internal_server_error",
+                    "message": f"An error occurred: {str(e)}",
+                }
+            }
             return
+
+    def reset_conversation(self):
+        self.messages = []
 
     @staticmethod
     def load_image_base64(file_path: Path) -> str:
