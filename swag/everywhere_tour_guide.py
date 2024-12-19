@@ -4,8 +4,8 @@ import logging
 from typing import AsyncGenerator
 import base64
 
-from swags.assistant import Assistant
-from swags.tools import SearchInternet, ReadWebsite, SearchForNearbyPlacesOfType
+from swag.assistant import Assistant
+from swag.tools import SearchInternet, ReadWebsite, SearchForNearbyPlacesOfType
 from swag.prompts import SamAssistantPrompt, SamAssistantPromptOneImage
 
 logger = logging.getLogger(__name__)
@@ -20,6 +20,7 @@ def base64_encode_image(image_path=None, image_bytes=None):
     elif image_bytes:
         return base64.b64encode(image_bytes).decode("utf-8")
     return None
+
 
 async def run_everywhere_tour_guide(
     base_image: str,
@@ -38,7 +39,9 @@ async def run_everywhere_tour_guide(
     # Encode the image bytes to base64 for the API
     base_image_encoded = base64_encode_image(image_bytes=base_image_bytes)
     masked_image_encoded = (
-        base64_encode_image(image_bytes=masked_image_bytes) if masked_image_bytes else ""
+        base64_encode_image(image_bytes=masked_image_bytes)
+        if masked_image_bytes
+        else ""
     )
 
     if not masked_image_encoded:
@@ -64,7 +67,10 @@ async def run_everywhere_tour_guide(
     )
 
     async for chunk in assistant(
-        prompt=prompt, images=[base_image_encoded, masked_image_encoded] if masked_image_encoded else [base_image_encoded]
+        prompt=prompt,
+        images=[base_image_encoded, masked_image_encoded]
+        if masked_image_encoded
+        else [base_image_encoded],
     ):
         if chunk["type"] == "message_delta" and chunk["delta"]["type"] == "text_delta":
             yield chunk["delta"]["text"]
