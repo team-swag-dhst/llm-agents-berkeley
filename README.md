@@ -9,7 +9,7 @@ The assistant is built on top of the Anthropic API, along with a series of tools
 
 Watch the demo & presentation:
 
-[![Hackathon Submission Presentation](....)](.....)
+[![Hackathon Submission Presentation](https://img.youtube.com/vi/41-gEmVGCjk/0.jpg)](https://www.youtube.com/watch?v=41-gEmVGCjk)
 
 ## Installation 
 
