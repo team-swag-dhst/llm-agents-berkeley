@@ -80,6 +80,7 @@ class GetDirections(BaseModel):
 
 class GetDistanceMatrix(BaseModel):
     """Get a matrix of distances between multiple origins and destinations."""
+
     origins: List[Tuple[float, float]] = Field(
         description="List of origin locations as tuples of (latitude, longitude)"
     )
@@ -91,10 +92,10 @@ class GetDistanceMatrix(BaseModel):
         default="driving",
     )
 
-    @model_validator(mode='after')
-    def check_fields(cls, values):
-        for field in ['origins', 'destinations']:
-            locations = values.get(field, [])
+    @model_validator(mode="after")
+    def check_fields(cls, values: Self) -> Self:
+        for field in ["origins", "destinations"]:
+            locations = getattr(values, field)
             if not locations:
                 raise ValueError(f"{field.capitalize()} list cannot be empty")
             if len(locations) > 25:  # Google Maps API limit
@@ -105,10 +106,11 @@ class GetDistanceMatrix(BaseModel):
 
         # Validate mode of transport
         valid_modes = ["driving", "walking", "bicycling", "transit"]
-        if values.get('mode') not in valid_modes:
+        if values.mode not in valid_modes:
             raise ValueError(f"Invalid mode. Must be one of: {', '.join(valid_modes)}")
 
         return values
+
 
 class GetElevation(BaseModel):
     """Get the elevation data for a list of locations."""
@@ -278,9 +280,7 @@ def search_google_maps_with_text(request: SearchGoogleMapsWithText) -> str:
 
 
 @ToolRegistry.register(SearchForNearbyPlacesOfType)
-def search_for_nearby_places_of_type(
-    request: SearchForNearbyPlacesOfType
-) -> str:
+def search_for_nearby_places_of_type(request: SearchForNearbyPlacesOfType) -> str:
     url = "https://places.googleapis.com/v1/places:searchNearby"
     fields = "places.id,places.displayName,places.rating"
     if request.include_photos:
@@ -294,7 +294,10 @@ def search_for_nearby_places_of_type(
         "includedTypes": request.types,
         "maxResultCount": 10,
         "locationRestriction": {
-            "circle": {"center": {"latitude": request.lat, "longitude": request.lon}, "radius": 100}
+            "circle": {
+                "center": {"latitude": request.lat, "longitude": request.lon},
+                "radius": 100,
+            }
         },
     }
     response = requests.post(url, headers=headers, json=payload)
