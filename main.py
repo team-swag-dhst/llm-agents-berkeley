@@ -8,7 +8,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from fastapi import FastAPI, Depends
 from fastapi.responses import StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
-from anthropic import AsyncAnthropic
+import anthropic
 from pydantic import BaseModel, ConfigDict
 from io import BytesIO
 import geocoder
@@ -44,6 +44,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+model_id = "claude-3-5-sonnet-latest"
+client = anthropic.AsyncAnthropic()
 
 class SamRequest(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -104,6 +106,7 @@ async def query_everywhere_tourguide(
             ReverseGeocode(lat=request.lat, lng=request.lon)
         )
 
+    # Ensure images are base64 strings without the data URL prefix
     request.base_image = request.base_image.replace("data:image/jpeg;base64,", "")
     request.masked_image = request.masked_image.replace("data:image/jpeg;base64,", "")
 
@@ -141,8 +144,8 @@ async def query_assistant(
     previous_conversation = conversations.get(query.id, [])
 
     assistant = Assistant(
-        client=AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY")),
-        model="claude-3-5-haiku-latest",
+        client=client,
+        model=model_id,
     )
 
     assistant.messages = previous_conversation

@@ -1,6 +1,5 @@
 from typing import List, Dict, Any, Optional, AsyncGenerator
 from pathlib import Path
-from anthropic import AsyncAnthropic
 from anthropic.types import TextBlock, ToolUseBlock
 import base64
 from swag.tools import ToolRegistry
@@ -25,7 +24,7 @@ def convert_pydantic_to_anthropic_schema(model) -> Dict[str, Any]:
 class Assistant:
     def __init__(
         self,
-        client: AsyncAnthropic,
+        client,
         model: str,
         system: Optional[str] = None,
         tools: List[Dict] = [],
@@ -64,12 +63,12 @@ class Assistant:
                     "content": [
                         {
                             "type": "text",
-                            "text": f"\nMaximum number of steps {self.max_steps} reached. Please start a new conversation."
+                            "text": f"\nMaximum number of steps {self.max_steps} reached. Please start a new conversation.",
                         }
                     ],
                     "model": self.model,
                     "stop_reason": "max_steps_reached",
-                }
+                },
             }
             return
 
@@ -100,12 +99,7 @@ class Assistant:
 
             self.messages.append({"role": "assistant", "content": response.content})
 
-            yield {
-                "type": "message",
-                "message": response.model_dump()
-            }
-
-            # ... (previous code remains the same)
+            yield {"type": "message", "message": response.model_dump()}
 
             tool_results = []
             for content in response.content:
@@ -116,7 +110,7 @@ class Assistant:
                         "delta": {
                             "type": "text_delta",
                             "text": content.text,
-                        }
+                        },
                     }
                 elif isinstance(content, ToolUseBlock):
                     yield {
@@ -126,7 +120,7 @@ class Assistant:
                             "id": content.id,
                             "name": content.name,
                             "input": content.input,
-                        }
+                        },
                     }
 
                     tool_function, tool_model = ToolRegistry.get(content.name)
@@ -144,12 +138,14 @@ class Assistant:
                         is_error = True
                         tool_result = str(e)
 
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": content.id,
-                        "content": tool_result,
-                        "is_error": is_error,
-                    })
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": content.id,
+                            "content": tool_result,
+                            "is_error": is_error,
+                        }
+                    )
 
                     yield {
                         "type": "message_delta",
@@ -158,7 +154,7 @@ class Assistant:
                             "id": content.id,
                             "output": tool_result,
                             "is_error": is_error,
-                        }
+                        },
                     }
 
                     logger.info("Tool result: %s", tool_result[:100])
@@ -177,7 +173,7 @@ class Assistant:
                 "error": {
                     "type": "internal_server_error",
                     "message": f"An error occurred: {str(e)}",
-                }
+                },
             }
             return
 
