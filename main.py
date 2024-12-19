@@ -1,7 +1,8 @@
 # main.py
 import sys
 import os
-from typing import List
+from typing import List, Dict
+from datetime import datetime, timedelta
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -25,16 +26,17 @@ from swag.tools import (
     reverse_geocode,
 )
 from swag.assistant import Assistant
+
 from swag.sam import predict_mask
 from swag.everywhere_tour_guide import run_everywhere_tour_guide
 import logging
-
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
+# --- CORS ---
 origins = ["*"]
 app.add_middleware(
     CORSMiddleware,
@@ -44,9 +46,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-model_id = "claude-3-5-sonnet-latest"
-client = anthropic.AsyncAnthropic()
+# --- Model and Client ---
+# model_id = "claude-3-5-sonnet-latest"
+model_id = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+client = anthropic.AsyncAnthropicBedrock()
 
+
+# --- Pydantic Models ---
 class SamRequest(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     image: str
@@ -75,11 +81,31 @@ class Query(BaseModel):
     stream: bool = True
 
 
-# In-memory storage for preferences (might be replaced with a database later)
+# --- In-memory storage for preferences (consider a database for production) ---
 user_preferences: List[str] = []
-conversations = {}
+
+# --- In-memory conversation storage with expiration ---
+conversations: Dict[str, Dict] = {}
+# {conversation_id: {"messages": [], "last_updated": datetime}}
+CONVERSATION_TIMEOUT = timedelta(minutes=30)
+# Expire conversations after 30 minutes of inactivity
 
 
+def cleanup_conversations():
+    now = datetime.now()
+    expired_ids = [
+        conversation_id
+        for conversation_id, data in conversations.items()
+        if now - data["last_updated"] > CONVERSATION_TIMEOUT
+    ]
+    print(">> Number of expired messages:", len(expired_ids))
+    for conversation_id in expired_ids:
+        del conversations[conversation_id]
+    print(">> # Total messages: ", len(conversations))
+    print(">> Total messages: ", conversations)
+
+
+# --- Routes ---
 @app.get("/location")
 async def get_location():
     g = geocoder.ip("me")
@@ -139,16 +165,31 @@ async def query_everywhere_tourguide(
 
 @app.post("/query_assistant")
 async def query_assistant(
-    query: Query, preferences: dict[str, list[str]] = Depends(get_preferences)
+    query: Query,
+    preferences: dict[str, list[str]] = Depends(get_preferences),
 ):
-    previous_conversation = conversations.get(query.id, [])
+    cleanup_conversations()  # Clean up expired conversations before each request
 
-    assistant = Assistant(
+    # Use the query.id as the conversation ID
+    conversation_id = query.id
+
+    # Initialize conversation data if it doesn't exist
+    if conversation_id not in conversations:
+        conversations[conversation_id] = {
+            "messages": [],
+            "last_updated": datetime.now(),
+        }
+
+    # Create a new Assistant instance for each request
+    swag_assistant = Assistant(
         client=client,
         model=model_id,
     )
 
-    assistant.messages = previous_conversation
+    # Load messages into the assistant
+    swag_assistant.messages = conversations[conversation_id]["messages"]
+    print(">> PREVIOUS MESSAGES:", swag_assistant.messages)
+
     user_preferences = preferences["preferences"]
     preferences_str = ", ".join(user_preferences)
     location_str = reverse_geocode(ReverseGeocode(lat=query.lat, lng=query.lon))
@@ -167,8 +208,8 @@ async def query_assistant(
 
             Note: if you need to geocode, use internet search of geolocation, not the geocode tool
             """
-            assistant.system = system_trip
-            assistant.define_tools(
+            swag_assistant.system = system_trip
+            swag_assistant.define_tools(
                 [
                     SearchInternet,
                     ReadWebsite,
@@ -193,14 +234,14 @@ async def query_assistant(
 
             action = "eat" if query.query_type == "restaurant" else "visit"
 
-            assistant.system = system_template.format(
+            swag_assistant.system = system_template.format(
                 query_type=query.query_type,
                 location=location_str,
                 preferences_str=preferences_str,
                 additional_info=additional_info,
                 action=action,
             )
-            assistant.define_tools(
+            swag_assistant.define_tools(
                 [SearchInternet, ReadWebsite, SearchForNearbyPlacesOfType]
             )
         else:
@@ -212,12 +253,12 @@ async def query_assistant(
             )
             return
 
-        # Use async for to iterate over the assistant's response
-
-        # Use async for to iterate over the assistant's response
-        async for response_chunk in assistant(query.query):
-            conversations[query.id] = assistant.messages
-            print(">>> Response Chunk:", response_chunk)
+        async for response_chunk in swag_assistant(query.query):
+            conversations[conversation_id]["messages"] = (
+                swag_assistant.messages.copy()
+            )
+            conversations[conversation_id]["last_updated"] = datetime.now()
+            logger.info(">>> Response Chunk: %s", response_chunk)
             yield json.dumps(response_chunk)
 
     if query.stream:
