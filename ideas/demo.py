@@ -31,6 +31,10 @@ def hide_streamlit_style():
 # Call the function to hide Streamlit style
 hide_streamlit_style()
 
+# --- Session-Based Conversation ID ---
+if "conversation_id" not in st.session_state:
+    st.session_state.conversation_id = str(uuid.uuid4())
+
 
 async def get_location():
     async with httpx.AsyncClient() as client:
@@ -65,7 +69,7 @@ async def query_assistant(query_type, query):
             "POST",
             "http://localhost:8000/query_assistant",
             json={
-                "id": str(uuid.uuid4()),
+                "id": st.session_state.conversation_id,
                 "query_type": query_type,
                 "query": query,
                 "lat": lat,
@@ -77,16 +81,13 @@ async def query_assistant(query_type, query):
                 yield chunk
 
 
-async def query_tourguide(base_image, masked_image, location, lat, lon):
+async def query_tourguide(base_image, location, lat, lon):
     async with httpx.AsyncClient() as client:
         async with client.stream(
             "POST",
             "http://localhost:8000/tourguide",
             json={
                 "base_image": base64.b64encode(base_image).decode("utf-8"),
-                "masked_image": base64.b64encode(masked_image).decode("utf-8")
-                if masked_image
-                else "",
                 "location": location,
                 "lat": lat,
                 "lon": lon,
@@ -114,6 +115,11 @@ if not asyncio.run(check_backend()):
 
 # Sidebar for managing preferences
 with st.sidebar:
+    st.markdown(
+        "You can ask about trips, restaurants, or places or upload an image to activate your tour guide!"
+    )
+    st.markdown("---")
+
     st.header("User Information")
 
     # Add name input
@@ -123,13 +129,13 @@ with st.sidebar:
     user_name = st.text_input("Enter your name:", value=st.session_state.user_name)
     if user_name:
         st.session_state.user_name = user_name
-        st.success(f"Hi {user_name}!")
+        st.success(f"👋 Hi {user_name}!")
 
     st.header("User Preferences")
     new_preference = st.text_input("Add a new preference:")
     if st.button("Add Preference"):
         if new_preference:
-            result = asyncio.run(add_preference(new_preference))
+            asyncio.run(add_preference(new_preference))
             st.success(f"Added preference: {new_preference}")
 
     st.subheader("Current Preferences:")
@@ -151,39 +157,38 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"], avatar=avatars.get(message["role"])):
         st.markdown(message["content"])
 
-# --- Tab Selection ---
-st.write(
-    f"Hi {st.session_state.user_name}! You can ask about trips, restaurants, or places or upload an image to activate your tour guide!"
+# --- Main Interface ---
+st.markdown(f"Hi {st.session_state.user_name}! I am your SWAG Assistant.")
+
+# --- Query Type Selection ---
+query_type_options = {
+    "trip": "\U0001f9ed Plan a Trip",
+    "restaurant": "\U0001f32e Find a Restaurant",
+    "place": "\U0001f500 Discover a Place",
+    "tourguide": "🖼️ Activate Tour Guide",
+}
+
+if "query_type" not in st.session_state:
+    st.session_state.query_type = "trip"  # Default
+
+selected_query_type = st.radio(
+    "Choose what you want to do:",
+    list(query_type_options.values()),
+    key="query_type_radio",
+    horizontal=True,
 )
-tab_options = ["🦉 Chat", "🖼 Tour Guide"]
-selected_tab = st.radio("Select a tab:", tab_options, horizontal=True)
 
-# --- Chat Tab ---
-if selected_tab == "🦉 Chat":
-    # Initialize query_type in session state if it doesn't exist
-    if "query_type" not in st.session_state:
-        st.session_state.query_type = "trip"  # Default to "trip"
+# Reverse lookup for query_type based on the selected option label
+selected_query_type_key = [
+    key for key, value in query_type_options.items() if value == selected_query_type
+][0]
 
-    # Define options and their corresponding values
-    options = ["\U0001f500 Place", "\U0001f9ed Trip", "\U0001f32e Restaurant"]
-    option_values = ["place", "trip", "restaurant"]
+if selected_query_type_key != st.session_state.query_type:
+    st.session_state.query_type = selected_query_type_key
+    st.rerun()
 
-    # Radio buttons for query type selection
-    query_type = st.radio(
-        "Choose what you want to do:",
-        options,
-        key="query_type_radio",
-        horizontal=True,
-        index=option_values.index(st.session_state.query_type),
-    )
-
-    # Update query_type in session state based on radio button selection
-    selected_value = option_values[options.index(query_type)]
-    if selected_value != st.session_state.query_type:
-        st.session_state.query_type = selected_value
-        st.rerun()  # Rerun the app to ensure consistency
-
-    # Chat input
+# --- Chat Input or Image Upload ---
+if st.session_state.query_type != "tourguide":
     if prompt := st.chat_input(
         f"Hi {user_name}! Ask about a {st.session_state.query_type}..."
     ):
@@ -228,9 +233,7 @@ if selected_tab == "🦉 Chat":
             st.session_state.messages.append(
                 {"role": "assistant", "content": full_response}
             )
-
-# --- Tour Guide Tab ---
-elif selected_tab == "🖼 Tour Guide":
+else:
     st.write("Upload an image and provide a location to get a guided tour!")
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg"])
     location = st.text_input("Enter a location (optional):")
@@ -260,7 +263,7 @@ elif selected_tab == "🖼 Tour Guide":
                         async def process_tourguide_response():
                             full_response = ""
                             async for chunk in query_tourguide(
-                                base_image, None, location, lat, lon
+                                base_image, location, lat, lon
                             ):
                                 full_response += chunk + "\n"
                                 response_container.markdown(full_response)
@@ -274,4 +277,5 @@ elif selected_tab == "🖼 Tour Guide":
 # Add a button to start a new conversation
 if st.button("Start New Conversation"):
     st.session_state.messages = []
+    st.session_state.conversation_id = str(uuid.uuid4())
     st.rerun()
