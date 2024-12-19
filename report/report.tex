@@ -39,7 +39,7 @@ Travel w/ SwAG is an assistant developed by the \ac{SwAG} team. The assistant is
 \item Describing art, statues, and other visual elements.
 \end{itemize}
 
-    The assistant is built on top of the Anthropic API, along with a series of tools that it can use to obtain the information it requires. It has a unique feature in that it uses SAM (Segment Anything Model\footnote{https://ai.meta.com/sam2/}) to segment images, allowing for a more interactive experience. The target audience for this is basically anyone, but is more aimed towards tourists or people who are new to an area. The goal is to save time and get more out of your trip, in both information and experience.
+    The assistant is built on top of the Anthropic API, along with a series of tools that it can use to obtain the information it requires. It has a unique feature in that it uses SAM (Segment Anything Model\footnote{\url{https://ai.meta.com/sam2/}}) to segment images, allowing for a more interactive experience. The target audience for this is basically anyone, but is aimed towards tourists or people who are new to an area. The goal is to save time and get more out of your trip, in both information and experience.
 
 The users can interact with the assistant via text or images, and the assistant will respond with the information that it has found. We have also included a demo video, which shows the assistant in action, which you can watch here: \url{https://www.youtube.com/watch?v=41-gEmVGCjk}
 
@@ -60,9 +60,11 @@ Travel w/ SwAG  offers two powerful, interactive features:
 
 The implementation leverages Anthropic's tool use feature. We clearly defined the set of tools with Pydantic models for maintainability and usability. These can be easily translated to the format required by Anthropic for the tool use feature.
 
+Both the features are wrappers around the same assistant class, however have different tools \& prompts. This is where in the future we would like to merge this into 1 assistant, with custom query routing \& tool retrieval based on the user's query.
+
 \subsection{SwAG Assistant}
 
-As previously mentioned, we the most interesting feature of this assistant is to help to plan trips. An example we used in the provided video was:
+One interesting feature of this assistant is to help to plan trips. An example we used in the provided video was:
 
 \begin{lstlisting}
 I want to plan a trip to Marseille to eat Tajine, hike to Mont Blanc, and visit Barcelona. What's the total road trip distance, and how far will I hike on foot? Can you help me plan an itinerary?
@@ -78,6 +80,8 @@ The assistant will then research all the information that it needs, including:
 
 This will return a detailed plan back to user, including the total distance, the distances they can hike, and a detailed itinerary. From that, the user can further interact with the assistant, for example by asking about specific Morrocan restaurants in Marseille near their hotel.
 
+The assistant is able to understand the user's intentions and provide them with the information they need, in a way that is easy to understand and interact with.
+
 \subsection{Everywhere TourGuide}
 
 The TourGuide is a vision-based assistant that acts as a friendly 'tourguide' for any situation the user might be in. It analyses an image taken at the users current location to figure out what they are looking at, and then provides information on it.
@@ -91,7 +95,7 @@ In the provided video, we used the example of the Trevi Fountain in Rome, maskin
 We have a number of ideas for future work, including:
 
 \begin{itemize}
-\item \textbf{Integration with VR/AR}: We believe that the assistant could be even more useful it it was integrated with VR/AR, utilising pose-detection in invoke the SAM engine (via pointing) and therefore the tourguide.
+\item \textbf{Integration with VR/AR}: We believe that the assistant could be even more useful it it was integrated with VR/AR, utilising pose-detection to auto-invoke the SAM (via pointing) and therefore the tourguide.
 \item \textbf{TTS/STT}: We would like to integrate text-to-speech and speech-to-text capabilities, to make the assistant more accessible, in both the fact that you wouldn't need to take out your phone but also allowing visually impaired users to make use of the application
 \item \textbf{Memory}: Tying in with the theme of making the assistant more personalized, we would like to add a memory feature, where the assistant can remember previous interactions with the user and use that to provide more personalized responses.
 \end{itemize}
