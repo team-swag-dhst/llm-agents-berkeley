@@ -11,11 +11,13 @@ from . import config as cfg
 import googlemaps
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
 gmaps = googlemaps.Client(key=os.environ["GOOGLE_API_KEY"])
+
 
 class SearchInternet(BaseModel):
     """Search the internet with the provided query. The response from this tool is a list of the search results as JSON objects containing the URL, title and a short description of the website."""
@@ -54,8 +56,6 @@ class SearchForNearbyPlacesOfType(BaseModel):
     include_photos: bool = Field(
         description="Whether to include photos in the response.", default=False
     )
-    lat: float = Field(description="The latitude of the user's location.")
-    lon: float = Field(description="The longitude of the user's location.")
 
     @model_validator(mode="after")
     def validate_types(self) -> Self:
@@ -77,8 +77,10 @@ class GetDirections(BaseModel):
         default="driving",
     )
 
+
 class GetDistanceMatrix(BaseModel):
     """Get a matrix of distances between multiple origins and destinations."""
+
     origins: List[Tuple[float, float]] = Field(
         description="List of origin locations as tuples of (latitude, longitude)"
     )
@@ -90,10 +92,10 @@ class GetDistanceMatrix(BaseModel):
         default="driving",
     )
 
-    @model_validator(mode='after')
-    def check_fields(cls, values):
-        for field in ['origins', 'destinations']:
-            locations = values.get(field, [])
+    @model_validator(mode="after")
+    def check_fields(cls, values: Self) -> Self:
+        for field in ["origins", "destinations"]:
+            locations = getattr(values, field)
             if not locations:
                 raise ValueError(f"{field.capitalize()} list cannot be empty")
             if len(locations) > 25:  # Google Maps API limit
@@ -104,10 +106,11 @@ class GetDistanceMatrix(BaseModel):
 
         # Validate mode of transport
         valid_modes = ["driving", "walking", "bicycling", "transit"]
-        if values.get('mode') not in valid_modes:
+        if values.mode not in valid_modes:
             raise ValueError(f"Invalid mode. Must be one of: {', '.join(valid_modes)}")
 
         return values
+
 
 class GetElevation(BaseModel):
     """Get the elevation data for a list of locations."""
@@ -195,34 +198,55 @@ class ToolRegistry:
 
 
 @ToolRegistry.register(SearchInternet)
-def search_internet(
-        request: SearchInternet,
-) -> str:
+def search_internet(request: SearchInternet) -> str:
     url = f"https://s.jina.ai/{quote_plus(request.query)}"
     headers = {
         "Accept": "application/json",
         "Authorization": f"Bearer {os.environ['JINAI_API_KEY']}",
         "X-Retain-Images": "none",
+        "X-With-Generated-Alt": "true",
     }
-    response = requests.get(url, headers=headers, verify=True)
-    data: list[dict[str, Any]] = response.json()["data"]
+    try:
+        response = requests.get(url, headers=headers, verify=False)
+        response.raise_for_status()  # Raise an exception for bad status codes
+        json_response = response.json()
 
-    return_value = []
-    for item in data:
-        _ = item.pop('content', None)
-        return_value.append(item)
-    
-    logger.info("Received response from: `search_internet`")
-    return json.dumps(return_value)
+        if "data" not in json_response or not isinstance(json_response["data"], list):
+            raise ValueError("Unexpected response format")
+
+        data: list[dict[str, Any]] = json_response["data"]
+
+        return_value = []
+        for item in data:
+            return_value.append(item)
+
+        logger.info(f"`search_internet`: {return_value}")
+        return json.dumps(return_value)
+    except requests.RequestException as e:
+        error_message = f"Error in search_internet: {str(e)}"
+        logger.error(error_message)
+        return json.dumps({"error": error_message})
+    except (KeyError, ValueError, json.JSONDecodeError) as e:
+        error_message = f"Error processing search_internet response: {str(e)}"
+        logger.error(error_message)
+        return json.dumps({"error": error_message})
 
 
 @ToolRegistry.register(ReadWebsite)
-def read_website(request: ReadWebsite) -> str:
+def read_website(request: ReadWebsite, cache: dict[str, str]) -> str:
+    if request.url in cache:
+        return cache[request.url]
 
     url = f"https://r.jina.ai/{request.url}"
-    headers = {"Authorization": f"Bearer {os.environ['JINAI_API_KEY']}"}
-    response = requests.get(url, headers=headers, verify=True)
-    logger.info("Received response from: `read_website`")
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {os.environ['JINAI_API_KEY']}",
+        "X-Retain-Images": "none",
+        "X-With-Generated-Alt": "true",
+    }
+
+    response = requests.get(url, headers=headers, verify=False)
+    logger.info(f"`read_website` (truncated): {response.text[:1000]}")
     return response.text
 
 
@@ -256,9 +280,7 @@ def search_google_maps_with_text(request: SearchGoogleMapsWithText) -> str:
 
 
 @ToolRegistry.register(SearchForNearbyPlacesOfType)
-def search_for_nearby_places_of_type(
-    request: SearchForNearbyPlacesOfType
-) -> str:
+def search_for_nearby_places_of_type(request: SearchForNearbyPlacesOfType) -> str:
     url = "https://places.googleapis.com/v1/places:searchNearby"
     fields = "places.id,places.displayName,places.rating"
     if request.include_photos:
@@ -272,7 +294,10 @@ def search_for_nearby_places_of_type(
         "includedTypes": request.types,
         "maxResultCount": 10,
         "locationRestriction": {
-            "circle": {"center": {"latitude": request.lat, "longitude": request.lon}, "radius": 100}
+            "circle": {
+                "center": {"latitude": request.lat, "longitude": request.lon},
+                "radius": 100,
+            }
         },
     }
     response = requests.post(url, headers=headers, json=payload)
@@ -294,7 +319,7 @@ def get_directions(request: GetDirections) -> str:
 def get_distance_matrix(request: GetDistanceMatrix) -> str:
     try:
         matrix = gmaps.distance_matrix(
-            request.origins, request.destinations, mode=request.mode.value
+            request.origins, request.destinations, mode=request.mode
         )
         logger.info(f"`get_distance_matrix`: {matrix}")
         return json.dumps(matrix)
@@ -312,6 +337,7 @@ def get_elevation(request: GetElevation) -> str:
 
 @ToolRegistry.register(Geocode)
 def geocode(request: Geocode) -> str:
+    logger.info(f">> Geocode: input:{request.address}")
     geocode_result = gmaps.geocode(request.address)
     logger.info(f"`geocode`: {geocode_result}")
     coordinates = geocode_result[0]["geometry"]["location"]
@@ -320,9 +346,20 @@ def geocode(request: Geocode) -> str:
 
 @ToolRegistry.register(ReverseGeocode)
 def reverse_geocode(request: ReverseGeocode) -> str:
-    reverse_geocode_result = gmaps.reverse_geocode((request.lat, request.lng))
-    logger.info(f"`reverse_geocode`: {reverse_geocode_result}")
-    return json.dumps(reverse_geocode_result)
+    try:
+        reverse_geocode_result = gmaps.reverse_geocode((request.lat, request.lng))
+        logger.info(f"`reverse_geocode`: {reverse_geocode_result}")
+        if reverse_geocode_result:
+            # Extract the most relevant information
+            formatted_address = reverse_geocode_result[0].get(
+                "formatted_address", "Address not found"
+            )
+            return json.dumps({"formatted_address": formatted_address})
+        else:
+            return json.dumps({"error": "No results found for the given coordinates"})
+    except Exception as e:
+        logger.error(f"Error in reverse_geocode: {str(e)}")
+        return json.dumps({"error": f"An error occurred: {str(e)}"})
 
 
 @ToolRegistry.register(GetTimeZone)
