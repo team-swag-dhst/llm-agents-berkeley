@@ -93,23 +93,31 @@ class GetDistanceMatrix(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_fields(cls, values: Self) -> Self:
-        for field in ["origins", "destinations"]:
-            locations = getattr(values, field)
-            if not locations:
-                raise ValueError(f"{field.capitalize()} list cannot be empty")
-            if len(locations) > 25:  # Google Maps API limit
-                raise ValueError(f"Too many {field}. Maximum is 25.")
-            for lat, lon in locations:
-                if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
-                    raise ValueError(f"Invalid coordinates in {field}: ({lat}, {lon})")
+    def check_fields(self: Self) -> Self:
+        # Check origins
+        if not self.origins:
+            raise ValueError("Origins list cannot be empty")
+        if len(self.origins) > 25:  # Google Maps API limit
+            raise ValueError("Too many origins. Maximum is 25.")
+        for lat, lon in self.origins:
+            if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
+                raise ValueError(f"Invalid coordinates in origins: ({lat}, {lon})")
+
+        # Check destinations
+        if not self.destinations:
+            raise ValueError("Destinations list cannot be empty")
+        if len(self.destinations) > 25:  # Google Maps API limit
+            raise ValueError("Too many destinations. Maximum is 25.")
+        for lat, lon in self.destinations:
+            if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
+                raise ValueError(f"Invalid coordinates in destinations: ({lat}, {lon})")
 
         # Validate mode of transport
         valid_modes = ["driving", "walking", "bicycling", "transit"]
-        if values.mode not in valid_modes:
+        if self.mode not in valid_modes:
             raise ValueError(f"Invalid mode. Must be one of: {', '.join(valid_modes)}")
 
-        return values
+        return self
 
 
 class GetElevation(BaseModel):
