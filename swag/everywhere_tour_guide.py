@@ -66,11 +66,13 @@ async def run_everywhere_tour_guide(
         tools=tools,
     )
 
+    image_list = [base_image_encoded]
+    if masked_image_encoded:
+        image_list.append(masked_image_encoded)
+
     async for chunk in assistant(
         prompt=prompt,
-        images=[base_image_encoded, masked_image_encoded]
-        if masked_image_encoded
-        else [base_image_encoded],
+        images=image_list,
     ):
         if chunk["type"] == "message_delta" and chunk["delta"]["type"] == "text_delta":
             yield chunk["delta"]["text"]
