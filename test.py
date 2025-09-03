@@ -1,9 +1,8 @@
 import requests
 import base64
-import json
+
 
 def tourguide():
-
     base_img_path = "imgs/dali.jpg"
     masked_img_path = "imgs/masked_dali.jpg"
     location = "Vatican Museum"
@@ -23,30 +22,44 @@ def tourguide():
         "masked_image": masked_img,
         "location": location,
         "lat": lat,
-        "lon": lon
+        "lon": lon,
+        "stream": True,
     }
 
-    response = requests.post(url, json=request_body, stream=True)
-    for line in response.iter_lines():
-        print(line.decode("utf-8"))
+    # Using requests for streaming
+    with requests.post(url, json=request_body, stream=True) as response:
+        if response.status_code == 200:
+            for chunk in response.iter_content(
+                chunk_size=1024
+            ):  # Adjust chunk_size as needed
+                if chunk:  # filter out keep-alive new chunks
+                    print(chunk.decode("utf-8"), end="\n\n")
+        else:
+            print(f"Error: {response.status_code}")
+            print(response.text)
+
+    print()
+
 
 def sam():
-
     base_img_path = "imgs/dali.png"
     with open(base_img_path, "rb") as img_file:
-        base_img = img_file.read()
-        base_img = base64.b64encode(base_img).decode('utf-8')
+        base_img = base64.b64encode(img_file.read()).decode("utf-8")
 
     clicks = [[100, 100], [200, 200]]
     url = "http://localhost:8000/sam"
 
-    request_body = {
-        "image": base_img,
-        "clicks": clicks
-    }
+    request_body = {"image": base_img, "clicks": clicks}
 
-    # response = requests.post(url, json=request_body)
-    # with open("response_output.png", "wb") as f:
-        # f.write(response.content)
+    # Using requests for non-streaming
+    response = requests.post(url, json=request_body)
+    if response.status_code == 200:
+        with open("response_output.png", "wb") as f:
+            f.write(response.content)
+    else:
+        print(f"Error: {response.status_code}")
+        print(response.text)
+
 
 tourguide()
+# sam() # Uncomment to test the sam function
